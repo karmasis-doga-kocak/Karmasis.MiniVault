@@ -60,17 +60,17 @@ public class TokenServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Issue_WithWrongKey_DoesNotValidate()
+    public async Task Issue_WithWrongKey_DoesNotValidate()
     {
         var sut = new TokenService(_ring, Options.Create(new TokenOptions()), _clock);
         var (token, _) = sut.Issue("c", []);
 
         var handler = new JsonWebTokenHandler { MapInboundClaims = false };
-        var result = handler.ValidateTokenAsync(token, new TokenValidationParameters
+        var result = await handler.ValidateTokenAsync(token, new TokenValidationParameters
         {
             ValidIssuer = TokenService.Issuer, ValidAudience = TokenService.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(new byte[32]), ValidateLifetime = false,
-        }).GetAwaiter().GetResult();
+        });
         result.IsValid.ShouldBeFalse();
     }
 
