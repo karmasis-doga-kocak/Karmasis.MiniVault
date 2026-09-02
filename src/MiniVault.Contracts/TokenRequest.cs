@@ -1,7 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace MiniVault.Contracts;
 
 public sealed class TokenRequest
 {
-    public string ClientId { get; set; }
-    public string ClientSecret { get; set; }
+    [JsonPropertyName("clientId")]
+    public string ClientId { get; set; } = "";
+
+    [JsonPropertyName("clientSecret")]
+    public string ClientSecret { get; set; } = "";
 }

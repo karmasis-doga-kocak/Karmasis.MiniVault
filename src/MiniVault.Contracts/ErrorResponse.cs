@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MiniVault.Contracts;
 
 public sealed class ErrorResponse
@@ -9,6 +11,11 @@ public sealed class ErrorResponse
     public const string Conflict = "conflict";
     public const string VaultUnavailable = "vault_unavailable";
 
-    public string Error { get; set; }
-    public string Detail { get; set; }
+    /// <summary>One of the constants above. Always present.</summary>
+    [JsonPropertyName("error")]
+    public string Error { get; set; } = "";
+
+    /// <summary>Human-readable elaboration. Absent on responses that have nothing safe to add.</summary>
+    [JsonPropertyName("detail")]
+    public string? Detail { get; set; }
 }

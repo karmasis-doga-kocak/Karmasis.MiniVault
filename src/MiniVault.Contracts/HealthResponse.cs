@@ -1,8 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace MiniVault.Contracts;
 
 public sealed class HealthResponse
 {
-    public string Status { get; set; }
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("initialized")]
     public bool Initialized { get; set; }
+
+    [JsonPropertyName("activeDataKeyVersion")]
     public int ActiveDataKeyVersion { get; set; }
 }
