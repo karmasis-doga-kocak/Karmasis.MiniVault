@@ -493,7 +493,12 @@ public class MiniVaultClientTests : IDisposable
         using var client = new MiniVaultClient(options, handler, () => T0);
 
         await client.GetSecretAsync("a");
-        OnDisk().ShouldNotBeEmpty();
+
+        // The refresh timer is already running, so on a loaded machine the first tick can dequeue the 404 and
+        // evict the entry before this line runs. Read the disk first, then decide: an empty disk is only
+        // acceptable once the 404 has been served, because eviction never happens before it.
+        var diskAfterFirstRead = OnDisk();
+        if (!notFoundDequeued.Task.IsCompleted) diskAfterFirstRead.ShouldNotBeEmpty();
 
         var signalled = await Task.WhenAny(notFoundDequeued.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         signalled.ShouldBe(notFoundDequeued.Task);
@@ -536,7 +541,10 @@ public class MiniVaultClientTests : IDisposable
         using var client = new MiniVaultClient(options, handler, () => T0);
 
         await client.GetSecretAsync("a");
-        OnDisk().ShouldNotBeEmpty();
+
+        // Same race as the 404 test: the first tick may already have served the 403 and evicted the entry.
+        var diskAfterFirstRead = OnDisk();
+        if (!forbiddenDequeued.Task.IsCompleted) diskAfterFirstRead.ShouldNotBeEmpty();
 
         var signalled = await Task.WhenAny(forbiddenDequeued.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         signalled.ShouldBe(forbiddenDequeued.Task);
@@ -622,6 +630,42 @@ public class MiniVaultClientTests : IDisposable
         await Task.Delay(TimeSpan.FromSeconds(2.5));
 
         handler.Requests.Count.ShouldBe(after);
+    }
+
+    [Fact]
+    public async Task Dispose_WaitsForAnInFlightRefreshPass_AndWritesNothingAfterwards()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+
+        // The refresh pass's request is held open by the gate until the test releases it.
+        var refreshStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var gate = new ManualResetEventSlim(false);
+        handler.Fallback = request =>
+        {
+            refreshStarted.TrySetResult(true);
+            gate.Wait(TimeSpan.FromSeconds(10));
+            return StubHandler.JsonResponse(HttpStatusCode.NotFound, new ErrorResponse { Error = ErrorResponse.NotFound });
+        };
+
+        var client = new MiniVaultClient(Options(cacheDirectory: _dir, refreshInterval: RefreshTick), handler, () => T0);
+        await client.GetSecretAsync("a");
+        var started = await Task.WhenAny(refreshStarted.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        started.ShouldBe(refreshStarted.Task);
+
+        var dispose = Task.Run(client.Dispose);
+        // The pass is blocked on the gate, so Dispose cannot have returned yet.
+        var early = await Task.WhenAny(dispose, Task.Delay(300));
+        early.ShouldNotBe(dispose);
+
+        gate.Set();
+        var finished = await Task.WhenAny(dispose, Task.Delay(TimeSpan.FromSeconds(10)));
+        finished.ShouldBe(dispose);
+
+        // The pass saw the 404 after Dispose had begun, so its eviction was not written to disk: the file still
+        // holds what the first read stored. The test's own Dispose can now delete the directory safely.
+        OnDisk().Count.ShouldBe(1);
     }
 
     [Fact]

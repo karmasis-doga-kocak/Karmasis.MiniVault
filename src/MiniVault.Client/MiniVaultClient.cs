@@ -30,7 +30,17 @@ internal sealed class MiniVaultClient : IMiniVaultClient
     /// <summary>Guards against overlapping background refresh ticks (0 = idle, 1 = running).</summary>
     private int _refreshing;
 
+    /// <summary>
+    /// Set while no refresh pass is running, so <see cref="Dispose"/> can wait for one that is. Reset by the
+    /// timer tick before the pass starts (not by the pass itself, which may block synchronously in a handler).
+    /// Deliberately never disposed: a late tick's finally block must always be able to set it.
+    /// </summary>
+    private readonly ManualResetEventSlim _refreshIdle = new ManualResetEventSlim(true);
+
     private int _disposed;
+
+    /// <summary>How long <see cref="Dispose"/> waits for an in-flight refresh pass before giving up on it.</summary>
+    private static readonly TimeSpan DisposeRefreshWait = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Creates a client over the given message handler. The handler's lifetime is taken over by this instance:
@@ -182,14 +192,20 @@ internal sealed class MiniVaultClient : IMiniVaultClient
 
     /// <summary>
     /// Stops the background refresh and releases the underlying <see cref="HttpClient"/> (and its handler) and
-    /// the token provider. Safe to call more than once.
+    /// the token provider. A refresh pass that is running when this is called is waited for (bounded), so no
+    /// cache file is written after Dispose has returned. Safe to call more than once.
     /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _timer?.Dispose();
+        // Disposing the HttpClient aborts any request the refresh pass is waiting on, so the wait below is short
+        // in practice; the bound only protects a caller from a handler that ignores cancellation.
         _httpClient.Dispose();
+
+        _refreshIdle.Wait(DisposeRefreshWait);
+
         _tokens.Dispose();
     }
 
@@ -220,6 +236,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
     {
         // A tick that arrives while the previous one is still running is skipped rather than queued.
         if (Interlocked.CompareExchange(ref _refreshing, 1, 0) != 0) return;
+        _refreshIdle.Reset();
         _ = RunRefreshAsync();
     }
 
@@ -236,6 +253,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
         finally
         {
             Interlocked.Exchange(ref _refreshing, 0);
+            _refreshIdle.Set();
         }
     }
 
@@ -306,7 +324,8 @@ internal sealed class MiniVaultClient : IMiniVaultClient
             }
         }
 
-        if (changed) PersistDisk();
+        // Nothing is written once Dispose has started: the owner may be tearing down the cache directory.
+        if (changed && Volatile.Read(ref _disposed) == 0) PersistDisk();
 
         // Raised after all cache state has settled, one event per entry the pass could not reach. That entry is
         // still what a read would be served, so this is the same signal a fallback read gives — including
