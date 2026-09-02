@@ -5,7 +5,12 @@
     <AssemblyName>minivault</AssemblyName>
     <RootNamespace>MiniVault.Server</RootNamespace>
     <UserSecretsId>minivault-server</UserSecretsId>
+    <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Karmasis.Cryptography" Version="26.3.0-dek.1" />
