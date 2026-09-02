@@ -12,7 +12,7 @@ using MiniVault.Server.Data;
 namespace MiniVault.Server.Data.Migrations
 {
     [DbContext(typeof(MiniVaultDbContext))]
-    [Migration("20260902123340_Initial")]
+    [Migration("20260902132524_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -83,6 +83,9 @@ namespace MiniVault.Server.Data.Migrations
                     b.Property<byte[]>("SecretHash")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
+
+                    b.Property<int>("SecretIterations")
+                        .HasColumnType("int");
 
                     b.Property<byte[]>("SecretSalt")
                         .IsRequired()
@@ -200,6 +203,12 @@ namespace MiniVault.Server.Data.Migrations
                     b.Property<int>("DekVersion")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -254,17 +263,21 @@ namespace MiniVault.Server.Data.Migrations
 
             modelBuilder.Entity("MiniVault.Server.Data.Entities.ClientRole", b =>
                 {
-                    b.HasOne("MiniVault.Server.Data.Entities.Client", null)
+                    b.HasOne("MiniVault.Server.Data.Entities.Client", "Client")
                         .WithMany("Roles")
                         .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MiniVault.Server.Data.Entities.Role", null)
+                    b.HasOne("MiniVault.Server.Data.Entities.Role", "Role")
                         .WithMany()
                         .HasForeignKey("RoleName")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("MiniVault.Server.Data.Entities.RoleRule", b =>

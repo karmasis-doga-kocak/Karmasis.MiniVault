@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>MiniVault.Contracts</RootNamespace>
+    <AssemblyName>Karmasis.MiniVault.Contracts</AssemblyName>
+    <PackageId>Karmasis.MiniVault.Contracts</PackageId>
+    <Description>Request and response types of the MiniVault HTTP API.</Description>
+    <IsPackable>true</IsPackable>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

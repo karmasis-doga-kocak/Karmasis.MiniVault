@@ -43,6 +43,7 @@ public sealed class MiniVaultDbContext(DbContextOptions<MiniVaultDbContext> opti
             e.Property(x => x.Ciphertext).IsRequired();
             e.Property(x => x.ContentType).HasMaxLength(128);
             e.Property(x => x.UpdatedBy).HasMaxLength(128);
+            e.Property(x => x.RowVersion).IsRowVersion();
             e.HasOne<DataKey>().WithMany().HasForeignKey(x => x.DekVersion).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -53,7 +54,7 @@ public sealed class MiniVaultDbContext(DbContextOptions<MiniVaultDbContext> opti
             e.Property(x => x.ClientId).HasMaxLength(128);
             e.Property(x => x.SecretHash).IsRequired();
             e.Property(x => x.SecretSalt).IsRequired();
-            e.HasMany(x => x.Roles).WithOne().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Roles).WithOne(x => x.Client).HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Role>(e =>
@@ -81,7 +82,7 @@ public sealed class MiniVaultDbContext(DbContextOptions<MiniVaultDbContext> opti
             e.HasKey(x => new { x.ClientId, x.RoleName });
             e.Property(x => x.ClientId).HasMaxLength(128);
             e.Property(x => x.RoleName).HasMaxLength(128);
-            e.HasOne<Role>().WithMany().HasForeignKey(x => x.RoleName).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleName).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<AuditLog>(e =>

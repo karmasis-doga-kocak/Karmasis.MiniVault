@@ -11,4 +11,5 @@ public sealed class Secret
     public int Version { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public string UpdatedBy { get; set; } = "";
+    public byte[] RowVersion { get; set; } = [];
 }

@@ -38,6 +38,7 @@ namespace MiniVault.Server.Data.Migrations
                     SecretHash = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
                     SecretSalt = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
                     Enabled = table.Column<bool>(type: "bit", nullable: false),
+                    SecretIterations = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
                 },
                 constraints: table =>
@@ -100,7 +101,8 @@ namespace MiniVault.Server.Data.Migrations
                     ContentType = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
                     Version = table.Column<int>(type: "int", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                    UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
