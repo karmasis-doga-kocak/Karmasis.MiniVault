@@ -9,7 +9,9 @@ The server, the operator CLI, the HTTP API, and a .NET client library are implem
 `Karmasis.MiniVault.Client` (netstandard2.0; .NET Framework 4.7.2+ and .NET 8+) fetches
 secrets from a MiniVault server, caches them for offline start, and retries once on an
 expired token. See `docs/client.md` for setup, caching, background refresh, TLS pinning, and
-error handling.
+error handling. It is not publishable to a shared feed yet: it depends on a prerelease
+`Karmasis.Cryptography` because that is the only version shipping a `netstandard2.0` target — see
+"Release prerequisites" in `docs/client.md`.
 
 ```csharp
 using MiniVault.Client;
