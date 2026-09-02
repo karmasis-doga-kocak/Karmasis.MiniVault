@@ -201,7 +201,8 @@ The server listens on HTTPS only; there is no plain-HTTP endpoint. Configuration
 | `Tls:Certificate:Path` / `Tls:Certificate:Password` | `null` | Load the server certificate from a PFX file. |
 | `Tls:Certificate:Thumbprint` | `null` | Load the server certificate (with its private key) from a certificate store instead of a file. |
 | `Tls:Certificate:StoreName` / `Tls:Certificate:StoreLocation` | `My` / `LocalMachine` | Where to look up `Thumbprint`. `StoreLocation` is `LocalMachine` or `CurrentUser`. |
-| `Tls:AllowDevelopmentCertificate` | `false` | Development only: use Kestrel's ASP.NET Core HTTPS development certificate instead of a configured one. |
+| `Tls:AllowDevelopmentCertificate` | `false` | Development only: use Kestrel's ASP.NET Core HTTPS development certificate instead of a configured one. Startup fails outside the Development environment unless `Tls:AllowDevelopmentCertificateOutsideDevelopment` is also `true`. |
+| `Tls:AllowDevelopmentCertificateOutsideDevelopment` | `false` | Allows `Tls:AllowDevelopmentCertificate` to be used outside Development. For automated test hosts only — never set this for a real deployment. |
 
 Set exactly one of `Tls:Certificate:Path` or `Tls:Certificate:Thumbprint` unless `Tls:AllowDevelopmentCertificate` is `true`. A misconfigured certificate (bad path, wrong password, missing thumbprint) fails startup immediately with a critical log entry, before the vault startup check runs.
 

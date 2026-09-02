@@ -121,6 +121,12 @@ public class KestrelConfigurationTests : IDisposable
         Should.Throw<InvalidOperationException>(() => KestrelConfiguration.ParseEndpoint("https://vault.example.com:8200"));
     }
 
+    [Fact]
+    public void NormalizeThumbprint_DropsSeparatorsAndInvisibleCharacters_AndUpperCases()
+    {
+        KestrelConfiguration.NormalizeThumbprint("‎ab:cd-ef").ShouldBe("ABCDEF");
+    }
+
     private static IEnumerable<string> Chunk(string thumbprint)
     {
         for (var i = 0; i < thumbprint.Length; i += 2)

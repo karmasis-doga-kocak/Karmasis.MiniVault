@@ -8,7 +8,7 @@ namespace MiniVault.Server.Hosting;
 /// thumbprint that is not installed — fails fast with a readable message instead of only failing once a client
 /// connects. Registered before <see cref="Vault.VaultStartupCheck"/> so TLS problems are reported first.
 /// </summary>
-public sealed class TlsStartupCheck(IOptions<TlsOptions> options, ILogger<TlsStartupCheck> logger) : IHostedService
+public sealed class TlsStartupCheck(IOptions<TlsOptions> options, IHostEnvironment env, ILogger<TlsStartupCheck> logger) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
     {
@@ -16,6 +16,8 @@ public sealed class TlsStartupCheck(IOptions<TlsOptions> options, ILogger<TlsSta
         try
         {
             tls.Validate();
+            if (tls.AllowDevelopmentCertificate && !env.IsDevelopment() && !tls.AllowDevelopmentCertificateOutsideDevelopment)
+                throw new InvalidOperationException(KestrelConfiguration.DevelopmentCertificateNotAllowedMessage);
             if (!tls.AllowDevelopmentCertificate)
                 KestrelConfiguration.LoadCertificate(tls.Certificate).Dispose();
         }

@@ -30,9 +30,12 @@ public static class KestrelConfiguration
     {
         try
         {
-            // DefaultKeySet works cross-platform (MachineKeySet is Windows-only semantics under the hood on
-            // Windows anyway; on Linux/macOS the default behaves like PersistKeySet/EphemeralKeySet as appropriate).
-            return X509CertificateLoader.LoadPkcs12FromFile(path, password, X509KeyStorageFlags.DefaultKeySet);
+            // MachineKeySet puts the private key in the machine-wide key store instead of the current user's
+            // profile, so a service account with no loaded profile (e.g. LocalSystem, or a Windows Service
+            // running non-interactively) can still use the certificate. MachineKeySet has no meaning outside
+            // Windows, so other platforms keep DefaultKeySet.
+            var keyStorageFlags = OperatingSystem.IsWindows() ? X509KeyStorageFlags.MachineKeySet : X509KeyStorageFlags.DefaultKeySet;
+            return X509CertificateLoader.LoadPkcs12FromFile(path, password, keyStorageFlags);
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {
@@ -45,7 +48,7 @@ public static class KestrelConfiguration
     private static X509Certificate2 LoadFromStore(string thumbprint, string storeName, string storeLocation)
     {
         var location = Enum.Parse<StoreLocation>(storeLocation, ignoreCase: true);
-        var normalized = thumbprint.Replace(":", "").Replace(" ", "").ToUpperInvariant();
+        var normalized = NormalizeThumbprint(thumbprint);
 
         using var store = new X509Store(storeName, location);
         store.Open(OpenFlags.ReadOnly);
@@ -63,9 +66,33 @@ public static class KestrelConfiguration
             $"No certificate with thumbprint '{normalized}' and a private key was found in {storeLocation}\\{storeName}.");
     }
 
+    /// <summary>Strips everything but ASCII hex digits (dropping separators such as ':' or '-', whitespace, and
+    /// invisible characters like U+200E LEFT-TO-RIGHT MARK that can be pasted in from some certificate tools) and
+    /// upper-cases the result.</summary>
+    internal static string NormalizeThumbprint(string thumbprint)
+    {
+        var chars = new char[thumbprint.Length];
+        var count = 0;
+        foreach (var c in thumbprint)
+        {
+            if (Uri.IsHexDigit(c))
+                chars[count++] = char.ToUpperInvariant(c);
+        }
+        return new string(chars, 0, count);
+    }
+
+    /// <summary>Message used by both <see cref="Apply"/> and <see cref="TlsStartupCheck"/> when
+    /// <see cref="TlsOptions.AllowDevelopmentCertificate"/> is used outside Development without
+    /// <see cref="TlsOptions.AllowDevelopmentCertificateOutsideDevelopment"/>.</summary>
+    internal const string DevelopmentCertificateNotAllowedMessage =
+        "Tls:AllowDevelopmentCertificate is only allowed in the Development environment. Configure Tls:Certificate:Path or Tls:Certificate:Thumbprint.";
+
     /// <summary>Configures Kestrel to listen on <see cref="TlsOptions.Url"/> only, over HTTPS.</summary>
     public static void Apply(WebApplicationBuilder builder, TlsOptions tls)
     {
+        if (tls.AllowDevelopmentCertificate && !builder.Environment.IsDevelopment() && !tls.AllowDevelopmentCertificateOutsideDevelopment)
+            throw new InvalidOperationException(DevelopmentCertificateNotAllowedMessage);
+
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
         {
             using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());

@@ -18,6 +18,10 @@ public sealed class TlsOptions
     /// (<c>dotnet dev-certs https --trust</c>) instead of a configured certificate.</summary>
     public bool AllowDevelopmentCertificate { get; set; }
 
+    /// <summary>Allows <see cref="AllowDevelopmentCertificate"/> to be used outside the Development environment.
+    /// For automated test hosts only — never set this for a real deployment.</summary>
+    public bool AllowDevelopmentCertificateOutsideDevelopment { get; set; }
+
     /// <summary>Throws <see cref="InvalidOperationException"/> with a message naming the offending setting;
     /// never includes <see cref="CertificateOptions.Password"/>.</summary>
     public void Validate()
@@ -41,6 +45,11 @@ public sealed class TlsOptions
 
         if (string.IsNullOrWhiteSpace(Certificate.StoreName))
             throw new InvalidOperationException("Tls:Certificate:StoreName must not be empty.");
+
+        if (!string.IsNullOrWhiteSpace(Certificate.Thumbprint) &&
+            KestrelConfiguration.NormalizeThumbprint(Certificate.Thumbprint).Length != 40)
+            throw new InvalidOperationException(
+                $"Tls:Certificate:Thumbprint '{Certificate.Thumbprint}' must contain exactly 40 hexadecimal digits (a SHA-1 thumbprint) once separators are removed.");
     }
 
     public sealed class CertificateOptions

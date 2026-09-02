@@ -90,6 +90,24 @@ public class TlsOptionsTests
     }
 
     [Fact]
+    public void Validate_Throws_WhenThumbprintIsNotExactly40HexDigits_AfterNormalization()
+    {
+        var tls = Valid();
+        tls.Certificate.Thumbprint = "AABBCC";
+
+        Should.Throw<InvalidOperationException>(() => tls.Validate());
+    }
+
+    [Fact]
+    public void Validate_Accepts_ThumbprintWithSeparators_ThatNormalizesTo40HexDigits()
+    {
+        var tls = Valid();
+        tls.Certificate.Thumbprint = "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD";
+
+        Should.NotThrow(() => tls.Validate());
+    }
+
+    [Fact]
     public void Validate_ErrorMessage_ForHttpUrl_NamesTheUrl()
     {
         var tls = Valid();
