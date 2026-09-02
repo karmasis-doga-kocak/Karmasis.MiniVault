@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Client", "src\Min
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Client.Tests", "test\MiniVault.Client.Tests\MiniVault.Client.Tests.csproj", "{45284CEC-F464-4925-B230-1B34698FB56F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Client.DependencyInjection", "src\MiniVault.Client.DependencyInjection\MiniVault.Client.DependencyInjection.csproj", "{6BBBF479-8B64-4FFE-95C1-159871E46AF1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -87,6 +89,18 @@ Global
 		{45284CEC-F464-4925-B230-1B34698FB56F}.Release|x64.Build.0 = Release|Any CPU
 		{45284CEC-F464-4925-B230-1B34698FB56F}.Release|x86.ActiveCfg = Release|Any CPU
 		{45284CEC-F464-4925-B230-1B34698FB56F}.Release|x86.Build.0 = Release|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Debug|x64.Build.0 = Debug|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Debug|x86.Build.0 = Debug|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Release|x64.ActiveCfg = Release|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Release|x64.Build.0 = Release|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Release|x86.ActiveCfg = Release|Any CPU
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -97,5 +111,6 @@ Global
 		{5EA1FC61-19CE-4833-BA86-18AF42FC74DE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{EF46DFF0-B898-43FF-ACF7-BD9424F09863} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{45284CEC-F464-4925-B230-1B34698FB56F} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
+		{6BBBF479-8B64-4FFE-95C1-159871E46AF1} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

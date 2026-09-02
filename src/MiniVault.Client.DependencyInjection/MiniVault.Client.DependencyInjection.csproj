@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>MiniVault.Client.DependencyInjection</RootNamespace>
+    <AssemblyName>Karmasis.MiniVault.Client.DependencyInjection</AssemblyName>
+    <PackageId>Karmasis.MiniVault.Client.DependencyInjection</PackageId>
+    <Description>IServiceCollection registration for the Karmasis MiniVault client.</Description>
+    <IsPackable>true</IsPackable>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MiniVault.Client\MiniVault.Client.csproj" />
+  </ItemGroup>
+</Project>
