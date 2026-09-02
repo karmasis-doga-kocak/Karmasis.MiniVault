@@ -71,8 +71,10 @@ public sealed class SecretService(MiniVaultDbContext db, SecretCipher cipher, Ti
 
     public async Task<IReadOnlyList<SecretListItem>> ListAsync(string prefix, CancellationToken ct)
     {
-        // The database collation is case-insensitive, so the LIKE-based StartsWith above can over-match on case;
-        // re-filter in memory with an ordinal (case-sensitive) comparison to match SecretName's case-sensitive semantics.
+        // Databases created before the collation fix use a legacy case-insensitive collation, so the LIKE-based
+        // StartsWith above can over-match on case there; re-filter in memory with an ordinal (case-sensitive)
+        // comparison to match SecretName's case-sensitive semantics. This also acts as a fail-closed safety net
+        // if collation configuration ever drifts.
         var candidates = await db.Secrets.AsNoTracking()
             .Where(s => s.Name.StartsWith(prefix))
             .OrderBy(s => s.Name)
