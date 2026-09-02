@@ -120,24 +120,79 @@ public class TokenProviderTests
     }
 
     [Fact]
-    public async Task GetAsync_ShortExpiresIn_ValidUntilExpiresIn_NoMarginApplied()
+    public async Task GetAsync_ShortExpiresIn_IsCachedForHalfItsLifetime()
     {
         var (provider, handler, clock) = CreateSut();
         handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok1", ExpiresIn = 30 });
         handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok2", ExpiresIn = 30 });
 
         var first = await provider.GetAsync(CancellationToken.None);
-        clock.Value = clock.Value.AddSeconds(29);
+        // The 60-second refresh margin is longer than the whole lifetime, so half of it is used instead: +15s.
+        clock.Value = clock.Value.AddSeconds(14);
         var stillCached = await provider.GetAsync(CancellationToken.None);
 
         first.ShouldBe("tok1");
         stillCached.ShouldBe("tok1");
         handler.Requests.Count.ShouldBe(1);
 
-        clock.Value = clock.Value.AddSeconds(2); // total +31s from issue
+        clock.Value = clock.Value.AddSeconds(2); // total +16s from issue
         var reLoggedIn = await provider.GetAsync(CancellationToken.None);
 
         reLoggedIn.ShouldBe("tok2");
         handler.Requests.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetAsync_ExpiresInOfOneSecond_IsStillCachedForAtLeastASecond()
+    {
+        var (provider, handler, clock) = CreateSut();
+        handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok1", ExpiresIn = 1 });
+
+        var first = await provider.GetAsync(CancellationToken.None);
+        // 1 / 2 == 0 seconds, which would make the token expire the instant it was issued; the floor of one
+        // second keeps it usable for the request it was fetched for.
+        clock.Value = clock.Value.AddMilliseconds(500);
+        var stillCached = await provider.GetAsync(CancellationToken.None);
+
+        first.ShouldBe("tok1");
+        stillCached.ShouldBe("tok1");
+        handler.Requests.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Invalidate_WithStaleToken_ClearsCache_WhenItIsStillTheCachedOne()
+    {
+        var (provider, handler, _) = CreateSut();
+        handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok1", ExpiresIn = 3600 });
+        handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok2", ExpiresIn = 3600 });
+
+        var first = await provider.GetAsync(CancellationToken.None);
+        provider.Invalidate(first);
+        var second = await provider.GetAsync(CancellationToken.None);
+
+        first.ShouldBe("tok1");
+        second.ShouldBe("tok2");
+        handler.Requests.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Invalidate_WithStaleToken_DoesNothing_WhenTheCachedTokenIsAlreadyNewer()
+    {
+        var (provider, handler, _) = CreateSut();
+        handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok1", ExpiresIn = 3600 });
+        handler.Enqueue(HttpStatusCode.OK, new TokenResponse { AccessToken = "tok2", ExpiresIn = 3600 });
+
+        var stale = await provider.GetAsync(CancellationToken.None);
+        provider.Invalidate(stale);
+        var fresh = await provider.GetAsync(CancellationToken.None);
+
+        // A second caller, still holding the token that failed, must not throw away the fresh one.
+        provider.Invalidate(stale);
+        var afterSecondInvalidate = await provider.GetAsync(CancellationToken.None);
+
+        fresh.ShouldBe("tok2");
+        afterSecondInvalidate.ShouldBe("tok2");
+        handler.Requests.Count.ShouldBe(2);
+        handler.Remaining.ShouldBe(0);
     }
 }

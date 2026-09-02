@@ -1,4 +1,5 @@
 using System.Text;
+using Karmasis.Cryptography.Keys;
 using MiniVault.Client.Internal;
 
 namespace MiniVault.Client.Tests.Internal;
@@ -67,6 +68,67 @@ public class DiskCacheTests : IDisposable
 
         var second = loaded.Single(e => e.Name == "no-content-type");
         second.ContentType.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Save_ThenLoad_PreservesTheEntityTag()
+    {
+        var cache = new DiskCache(_dir, "client", "secret", null);
+        var entry = new CachedSecret("a", Encoding.UTF8.GetBytes("v"), null, 7,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "W/\"7-abc\"");
+
+        cache.Save(new[] { entry });
+        var loaded = cache.Load();
+
+        loaded.Count.ShouldBe(1);
+        loaded[0].ETag.ShouldBe("W/\"7-abc\"");
+        loaded[0].ConditionalETag.ShouldBe("W/\"7-abc\"");
+    }
+
+    [Fact]
+    public void Load_AcceptsAFormatVersion1File_AndSynthesizesTheETagFromTheVersion()
+    {
+        Directory.CreateDirectory(_dir);
+        var cache = new DiskCache(_dir, "client", "secret", null);
+
+        // A file exactly as the previous release wrote it: format version 1, no per-entry eTag.
+        var json =
+            "{\"formatVersion\":1,\"entries\":[{" +
+            "\"name\":\"a\"," +
+            "\"value\":\"" + Convert.ToBase64String(Encoding.UTF8.GetBytes("v1")) + "\"," +
+            "\"contentType\":\"text/plain\"," +
+            "\"version\":7," +
+            "\"updatedAt\":\"2026-01-01T00:00:00+00:00\"," +
+            "\"fetchedAt\":\"2026-01-02T00:00:00+00:00\"}]}";
+
+        var key = KeyDerivation.Hkdf(Encoding.UTF8.GetBytes("secret"), Encoding.UTF8.GetBytes("client"), "minivault-cache", 32);
+        File.WriteAllBytes(cache.FilePath, AeadCipher.Encrypt(Encoding.UTF8.GetBytes(json), key, Encoding.UTF8.GetBytes("client")));
+
+        var loaded = cache.Load();
+
+        loaded.Count.ShouldBe(1);
+        loaded[0].Value.ShouldBe(Encoding.UTF8.GetBytes("v1"));
+        loaded[0].Version.ShouldBe(7);
+        // Nothing was recorded, so the tag the server produces for a version stands in — the upgraded client
+        // still issues a conditional read rather than a full one.
+        loaded[0].ETag.ShouldBe("\"7\"");
+    }
+
+    [Fact]
+    public void Load_RejectsAFutureFormatVersion_AndLogs()
+    {
+        Directory.CreateDirectory(_dir);
+        var cache = new DiskCache(_dir, "client", "secret", null);
+
+        var json = "{\"formatVersion\":99,\"entries\":[]}";
+        var key = KeyDerivation.Hkdf(Encoding.UTF8.GetBytes("secret"), Encoding.UTF8.GetBytes("client"), "minivault-cache", 32);
+        File.WriteAllBytes(cache.FilePath, AeadCipher.Encrypt(Encoding.UTF8.GetBytes(json), key, Encoding.UTF8.GetBytes("client")));
+
+        var logged = new List<string>();
+        var reader = new DiskCache(_dir, "client", "secret", logged.Add);
+
+        reader.Load().ShouldBeEmpty();
+        logged.ShouldHaveSingleItem();
     }
 
     [Fact]

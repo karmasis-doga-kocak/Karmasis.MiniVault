@@ -33,6 +33,21 @@ public sealed class StubHandler : HttpMessageHandler
     public StubHandler Enqueue(Exception exception) { _script.Enqueue(_ => throw exception); return this; }
     public int Remaining => _script.Count;
 
+    /// <summary>Answers every request the script no longer covers. Useful for background-refresh tests, where
+    /// the number of ticks — and therefore of requests — is not deterministic. When null, an unscripted request
+    /// throws instead.</summary>
+    public Func<HttpRequestMessage, HttpResponseMessage>? Fallback { get; set; }
+
+    /// <summary>Builds a JSON response the way <see cref="Enqueue(HttpStatusCode, object?, Action{HttpResponseMessage})"/>
+    /// does, for use from a <see cref="Fallback"/> responder.</summary>
+    public static HttpResponseMessage JsonResponse(HttpStatusCode status, object? body = null, Action<HttpResponseMessage>? configure = null)
+    {
+        var response = new HttpResponseMessage(status);
+        if (body is not null) response.Content = new StringContent(Json.Serialize(body), Encoding.UTF8, "application/json");
+        configure?.Invoke(response);
+        return response;
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -42,8 +57,10 @@ public sealed class StubHandler : HttpMessageHandler
         {
             Requests.Add(request);
             RequestBodies.Add(body);
-            if (_script.Count == 0) throw new InvalidOperationException($"No scripted response for {request.Method} {request.RequestUri}");
-            response = _script.Dequeue()(request);
+            var responder = _script.Count > 0
+                ? _script.Dequeue()
+                : Fallback ?? throw new InvalidOperationException($"No scripted response for {request.Method} {request.RequestUri}");
+            response = responder(request);
         }
 
         OnResponse?.Invoke(response);

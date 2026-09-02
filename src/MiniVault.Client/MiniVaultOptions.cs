@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 
 namespace MiniVault.Client;
 
@@ -48,12 +49,16 @@ public sealed class MiniVaultOptions
     public bool AllowInsecureHttp { get; set; }
 
     /// <summary>
-    /// Validates the options. Throws <see cref="ArgumentException"/> when <see cref="BaseUrl"/>,
-    /// <see cref="ClientId"/>, or <see cref="ClientSecret"/> is missing, when <see cref="BaseUrl"/> is not a
-    /// well-formed absolute URL, when it does not use <c>https</c> and <see cref="AllowInsecureHttp"/> is not set,
-    /// when <see cref="Timeout"/> is not positive, or when <see cref="ServerCertificateThumbprint"/> is set but
-    /// does not normalize to exactly 40 hex characters (a SHA-1 thumbprint) — an unusable pin fails closed here
-    /// rather than being silently skipped later.
+    /// Validates the options. Throws <see cref="ArgumentException"/>, naming the offending option, when:
+    /// <see cref="BaseUrl"/>, <see cref="ClientId"/>, or <see cref="ClientSecret"/> is missing;
+    /// <see cref="BaseUrl"/> is not a well-formed absolute URL, or does not use <c>https</c> while
+    /// <see cref="AllowInsecureHttp"/> is not set; <see cref="ClientId"/> does not match the server's client-id
+    /// rule (<c>^[A-Za-z0-9._-]{1,128}$</c>) — which also keeps it usable as a cache file name, since a
+    /// <c>/</c>, <c>\</c> or <c>..</c> in it would otherwise escape <see cref="CacheDirectory"/>;
+    /// <see cref="Timeout"/> is outside 1 second … 1 day; <see cref="MaxCacheAge"/> is not positive;
+    /// <see cref="RefreshInterval"/> is set but shorter than 1 second; or
+    /// <see cref="ServerCertificateThumbprint"/> is set but does not normalize to exactly 40 hex characters
+    /// (a SHA-1 thumbprint) — an unusable pin fails closed here rather than being silently skipped later.
     /// </summary>
     public void Validate()
     {
@@ -67,7 +72,21 @@ public sealed class MiniVaultOptions
         if (!AllowInsecureHttp && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("BaseUrl must use https:// unless AllowInsecureHttp is set.", nameof(BaseUrl));
 
-        if (Timeout <= TimeSpan.Zero) throw new ArgumentException("Timeout must be positive.", nameof(Timeout));
+        if (!ClientIdPattern.IsMatch(ClientId))
+        {
+            throw new ArgumentException(
+                "ClientId must be 1-128 characters long and contain only letters, digits, '.', '_' or '-'.",
+                nameof(ClientId));
+        }
+
+        if (Timeout < TimeSpan.FromSeconds(1) || Timeout > TimeSpan.FromDays(1))
+            throw new ArgumentException("Timeout must be between 1 second and 1 day.", nameof(Timeout));
+
+        if (MaxCacheAge <= TimeSpan.Zero)
+            throw new ArgumentException("MaxCacheAge must be positive.", nameof(MaxCacheAge));
+
+        if (RefreshInterval.HasValue && RefreshInterval.Value < TimeSpan.FromSeconds(1))
+            throw new ArgumentException("RefreshInterval must be at least 1 second when set.", nameof(RefreshInterval));
 
         if (!string.IsNullOrWhiteSpace(ServerCertificateThumbprint) &&
             MiniVaultClientFactory.NormalizeThumbprint(ServerCertificateThumbprint!).Length != 40)
@@ -77,4 +96,11 @@ public sealed class MiniVaultOptions
                 nameof(ServerCertificateThumbprint));
         }
     }
+
+    /// <summary>
+    /// The server's own client-id rule. Enforced here so an id the server would reject fails at startup, and so
+    /// the id stays safe to use verbatim as the disk cache's file name.
+    /// </summary>
+    private static readonly Regex ClientIdPattern =
+        new Regex(@"^[A-Za-z0-9._-]{1,128}$", RegexOptions.CultureInvariant);
 }

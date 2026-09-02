@@ -20,6 +20,5 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="MiniVault.Client.Tests" />
-    <InternalsVisibleTo Include="Karmasis.MiniVault.Client.DependencyInjection" />
   </ItemGroup>
 </Project>

@@ -40,15 +40,16 @@ internal sealed class MiniVaultHttp
     }
 
     /// <summary>
-    /// Fetches a secret. When <paramref name="ifNoneMatchVersion"/> is set, sends
-    /// <c>If-None-Match: "&lt;version&gt;"</c> and a 304 comes back as <see cref="HttpResult{T}.NotModified"/>.
+    /// Fetches a secret. When <paramref name="ifNoneMatch"/> is set, it is sent verbatim as the
+    /// <c>If-None-Match</c> header — it is an entity tag as the server produced it, quotes included — and a 304
+    /// comes back as <see cref="HttpResult{T}.NotModified"/>.
     /// </summary>
-    public async Task<HttpResult<SecretResponse>> GetSecretAsync(string name, string bearer, int? ifNoneMatchVersion, CancellationToken ct)
+    public async Task<HttpResult<SecretResponse>> GetSecretAsync(string name, string bearer, string? ifNoneMatch, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, BuildSecretPath(name));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
-        if (ifNoneMatchVersion.HasValue)
-            request.Headers.TryAddWithoutValidation("If-None-Match", "\"" + ifNoneMatchVersion.Value.ToString() + "\"");
+        if (!string.IsNullOrEmpty(ifNoneMatch))
+            request.Headers.TryAddWithoutValidation("If-None-Match", ifNoneMatch);
 
         using var response = await SendAsync(request, ct).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotModified)

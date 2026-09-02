@@ -20,7 +20,9 @@ internal sealed class TokenProvider : IDisposable
     private readonly Func<DateTimeOffset> _now;
     private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
 
-    private volatile CachedToken? _cached;
+    // Not `volatile`, so Interlocked.CompareExchange can be used on it without CS0420; every read goes through
+    // Volatile.Read and every unconditional write through Volatile.Write instead.
+    private CachedToken? _cached;
 
     public TokenProvider(MiniVaultHttp http, string clientId, string clientSecret, Func<DateTimeOffset> now)
     {
@@ -37,25 +39,28 @@ internal sealed class TokenProvider : IDisposable
 
     public async Task<string> GetAsync(CancellationToken ct)
     {
-        var cached = _cached;
+        var cached = Volatile.Read(ref _cached);
         if (cached is not null && cached.ExpiresAt > _now()) return cached.AccessToken;
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             // Re-check: another caller may have already refreshed while we were waiting for the gate.
-            cached = _cached;
+            cached = Volatile.Read(ref _cached);
             if (cached is not null && cached.ExpiresAt > _now()) return cached.AccessToken;
 
             var now = _now();
             var response = await _http.RequestTokenAsync(_clientId, _clientSecret, ct).ConfigureAwait(false);
 
+            // A token whose whole lifetime is shorter than the refresh margin would be cached for its full
+            // stated lifetime and then used at the very last moment; half of it (at least one second) leaves
+            // room for the request it is attached to to actually reach the server.
             var lifetime = response.ExpiresIn > RefreshMarginSeconds
                 ? response.ExpiresIn - RefreshMarginSeconds
-                : response.ExpiresIn;
+                : Math.Max(1, response.ExpiresIn / 2);
             var expiresAt = now.AddSeconds(lifetime);
 
-            _cached = new CachedToken(response.AccessToken, expiresAt);
+            Volatile.Write(ref _cached, new CachedToken(response.AccessToken, expiresAt));
             return response.AccessToken;
         }
         finally
@@ -64,7 +69,29 @@ internal sealed class TokenProvider : IDisposable
         }
     }
 
-    public void Invalidate() => _cached = null;
+    /// <summary>
+    /// Drops the cached token unconditionally, so the next <see cref="GetAsync"/> logs in again. Production code
+    /// uses <see cref="Invalidate(string)"/> instead; this overload exists for tests and for callers that want an
+    /// unconditional reset.
+    /// </summary>
+    public void Invalidate() => Volatile.Write(ref _cached, null);
+
+    /// <summary>
+    /// Drops the cached token only if it is still the one the caller just used, compared ordinally. Two callers
+    /// that both fail with 401 while holding the same token therefore cause exactly one re-login: the first
+    /// clears the cache, the second finds the already-refreshed token and leaves it alone. A caller whose stale
+    /// token has meanwhile been replaced never throws away the newer token.
+    /// </summary>
+    /// <param name="staleToken">The access token that was just rejected.</param>
+    public void Invalidate(string staleToken)
+    {
+        var cached = Volatile.Read(ref _cached);
+        if (cached is null) return;
+        if (!string.Equals(cached.AccessToken, staleToken, StringComparison.Ordinal)) return;
+
+        // Only clears if no one else has replaced the entry since it was read.
+        Interlocked.CompareExchange(ref _cached, null, cached);
+    }
 
     /// <summary>Releases the semaphore that serializes concurrent logins.</summary>
     public void Dispose() => _gate.Dispose();

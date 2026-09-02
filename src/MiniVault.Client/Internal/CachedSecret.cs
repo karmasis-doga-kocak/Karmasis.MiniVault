@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace MiniVault.Client.Internal;
 
@@ -9,7 +10,14 @@ internal sealed class CachedSecret
     /// Creates a cache entry. <paramref name="value"/> is copied, so the caller's array can be mutated or
     /// cleared afterwards without affecting the cached state.
     /// </summary>
-    public CachedSecret(string name, byte[] value, string? contentType, int version, DateTimeOffset updatedAt, DateTimeOffset fetchedAt)
+    public CachedSecret(
+        string name,
+        byte[] value,
+        string? contentType,
+        int version,
+        DateTimeOffset updatedAt,
+        DateTimeOffset fetchedAt,
+        string? eTag = null)
     {
         if (name is null) throw new ArgumentNullException(nameof(name));
         if (value is null) throw new ArgumentNullException(nameof(value));
@@ -20,6 +28,7 @@ internal sealed class CachedSecret
         Version = version;
         UpdatedAt = updatedAt;
         FetchedAt = fetchedAt;
+        ETag = eTag;
     }
 
     /// <summary>The secret's name.</summary>
@@ -49,6 +58,21 @@ internal sealed class CachedSecret
     /// </para>
     /// </summary>
     public DateTimeOffset FetchedAt { get; }
+
+    /// <summary>
+    /// The entity tag the server sent with this value, verbatim (quotes included), or <c>null</c> when the
+    /// response carried none — or when the entry came from a version 1 disk cache file, which predates the
+    /// field. See <see cref="ConditionalETag"/> for what is actually put on the wire.
+    /// </summary>
+    public string? ETag { get; }
+
+    /// <summary>
+    /// The value to send in <c>If-None-Match</c>: the server's own <see cref="ETag"/> when there is one, and
+    /// otherwise the tag the server is known to produce for a version — <c>"&lt;version&gt;"</c> — so a cache
+    /// entry without a recorded tag still gets a conditional read rather than a full one.
+    /// </summary>
+    public string ConditionalETag =>
+        ETag ?? "\"" + Version.ToString(CultureInfo.InvariantCulture) + "\"";
 
     /// <summary>
     /// Converts this cache entry into the public <see cref="Secret"/> representation. The value is copied, so

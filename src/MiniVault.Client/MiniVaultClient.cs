@@ -24,6 +24,9 @@ internal sealed class MiniVaultClient : IMiniVaultClient
     private readonly DiskCache? _disk;
     private readonly Timer? _timer;
 
+    /// <summary>Upper bound on a buffered response body: a secret is small, an unbounded stream is not.</summary>
+    private const long MaxResponseBytes = 16L * 1024 * 1024;
+
     /// <summary>Guards against overlapping background refresh ticks (0 = idle, 1 = running).</summary>
     private int _refreshing;
 
@@ -51,6 +54,9 @@ internal sealed class MiniVaultClient : IMiniVaultClient
         {
             BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl)),
             Timeout = options.Timeout,
+            // A secret is small; a compromised or misbehaving endpoint streaming an unbounded body must not be
+            // able to exhaust this process's memory. 16 MiB is far above any legitimate response.
+            MaxResponseContentBufferSize = MaxResponseBytes,
         };
         _http = new MiniVaultHttp(_httpClient);
         _tokens = new TokenProvider(_http, options.ClientId, options.ClientSecret, now);
@@ -83,17 +89,20 @@ internal sealed class MiniVaultClient : IMiniVaultClient
 
         var cached = TryGetCached(name);
 
-        // With background refresh on, memory is kept current by the timer; a read never goes to the server.
-        if (_options.RefreshInterval.HasValue && cached is not null)
+        // With background refresh on, the timer keeps memory current, so a read that finds an entry younger
+        // than MaxCacheAge is answered straight from memory, without a request and without an event. An entry
+        // the timer has *not* managed to keep fresh falls through to the live path below instead of being
+        // served silently; only if that path finds the server unreachable is the stale copy handed out, and
+        // then the fallback below raises the event with Stale set.
+        if (_options.RefreshInterval.HasValue && cached is not null &&
+            _now() - cached.FetchedAt <= _options.MaxCacheAge)
         {
-            var stale = _now() - cached.FetchedAt > _options.MaxCacheAge;
-            if (stale) RaiseServedFromCache(name, stale: true, cached.FetchedAt);
             return cached.ToSecret();
         }
 
         try
         {
-            var result = await WithTokenAsync(token => _http.GetSecretAsync(name, token, cached?.Version, ct), ct).ConfigureAwait(false);
+            var result = await WithTokenAsync(token => _http.GetSecretAsync(name, token, cached?.ConditionalETag, ct), ct).ConfigureAwait(false);
 
             if (result.NotModified)
             {
@@ -109,7 +118,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
                 return confirmed.ToSecret();
             }
 
-            var entry = ToEntry(name, result.Body);
+            var entry = ToEntry(name, result.Body, result.ETag);
             _memory.Set(entry);
             PersistDisk();
             return entry.ToSecret();
@@ -139,8 +148,13 @@ internal sealed class MiniVaultClient : IMiniVaultClient
         var body = new SetSecretRequest { Value = Convert.ToBase64String(value), ContentType = contentType };
         var response = await WithTokenAsync(token => _http.PutSecretAsync(name, token, body, ct), ct).ConfigureAwait(false);
 
-        // The cached copy is now a previous version; drop it rather than guessing at the new one.
-        Invalidate(name);
+        // The value just written is exactly what the server now holds, at the version it reports, so it is
+        // cached rather than dropped: a read right after a write costs no request, and a process that writes a
+        // secret and then restarts offline still finds it on disk. No entity tag is recorded — a later
+        // conditional read falls back to the tag the server produces for a version.
+        var writtenAt = _now();
+        _memory.Set(new CachedSecret(name, value, contentType, response.Version, writtenAt, writtenAt));
+        PersistDisk();
         return response.Version;
     }
 
@@ -180,9 +194,12 @@ internal sealed class MiniVaultClient : IMiniVaultClient
     }
 
     /// <summary>
-    /// Runs <paramref name="action"/> with a valid access token. A 401 invalidates the cached token and the
-    /// action is retried exactly once with a freshly issued one; a second 401 propagates. Tokens are not
-    /// revoked when a client's grants change, so a 401 is the only signal that a retry is worth attempting.
+    /// Runs <paramref name="action"/> with a valid access token. A 401 invalidates the token that was actually
+    /// used — and only that one — and the action is retried exactly once with a freshly issued token; a second
+    /// 401 propagates. Tokens are not revoked when a client's grants change, so a 401 is the only signal that a
+    /// retry is worth attempting. Invalidating by value rather than unconditionally means concurrent callers
+    /// that all fail on the same stale token cause exactly one re-login, and a caller whose token has already
+    /// been replaced by a newer one never throws that newer token away.
     /// </summary>
     private async Task<T> WithTokenAsync<T>(Func<string, Task<T>> action, CancellationToken ct)
     {
@@ -193,7 +210,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
         }
         catch (MiniVaultAuthException)
         {
-            _tokens.Invalidate();
+            _tokens.Invalidate(token);
             var refreshed = await _tokens.GetAsync(ct).ConfigureAwait(false);
             return await action(refreshed).ConfigureAwait(false);
         }
@@ -224,14 +241,23 @@ internal sealed class MiniVaultClient : IMiniVaultClient
 
     /// <summary>
     /// Re-reads every secret currently held in memory with a conditional GET. Listing is deliberately not used:
-    /// a client may be allowed to read its own secrets without being allowed to list. Per-secret failures are
-    /// logged and skipped, so one unreadable secret does not stop the rest from refreshing. The disk cache is
-    /// written at most once, after the loop, and only if some secret actually changed — a conditional-GET-only
+    /// a client may be allowed to read its own secrets without being allowed to list. The disk cache is written
+    /// at most once, after the loop, and only if something actually changed — a conditional-GET-only
     /// confirmation never touches disk, and a run of many secrets does not do one disk write per secret.
+    /// <para>
+    /// Per-secret outcomes: a 404 means the secret was deleted on the server and a 403 means the grant that
+    /// allowed reading it was revoked; in both cases the entry is evicted from memory (and from disk, by the
+    /// single write after the loop), because continuing to serve it would hand out a value the client is no
+    /// longer entitled to. An unreachable server leaves the entry in place but is reported through
+    /// <see cref="SecretServedFromCache"/> once the pass is over, so a caller that never calls
+    /// <see cref="GetSecretAsync"/> again still learns that what it holds is no longer being confirmed. Any
+    /// other failure is logged and skipped, so one unreadable secret does not stop the rest from refreshing.
+    /// </para>
     /// </summary>
     private async Task RefreshAsync(CancellationToken ct)
     {
         var changed = false;
+        List<CachedSecret>? unreachable = null;
 
         foreach (var entry in _memory.Snapshot())
         {
@@ -239,7 +265,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
 
             try
             {
-                var result = await WithTokenAsync(token => _http.GetSecretAsync(entry.Name, token, entry.Version, ct), ct).ConfigureAwait(false);
+                var result = await WithTokenAsync(token => _http.GetSecretAsync(entry.Name, token, entry.ConditionalETag, ct), ct).ConfigureAwait(false);
 
                 if (result.NotModified)
                 {
@@ -247,8 +273,30 @@ internal sealed class MiniVaultClient : IMiniVaultClient
                     continue;
                 }
 
-                _memory.Set(ToEntry(entry.Name, result.Body));
+                _memory.Set(ToEntry(entry.Name, result.Body, result.ETag));
                 changed = true;
+            }
+            catch (MiniVaultNotFoundException)
+            {
+                _memory.Remove(entry.Name);
+                changed = true;
+                if (Volatile.Read(ref _disposed) == 0)
+                    _options.Log?.Invoke($"MiniVault background refresh dropped '{entry.Name}' from the cache: the server no longer has it.");
+            }
+            catch (MiniVaultForbiddenException)
+            {
+                _memory.Remove(entry.Name);
+                changed = true;
+                if (Volatile.Read(ref _disposed) == 0)
+                    _options.Log?.Invoke($"MiniVault background refresh dropped '{entry.Name}' from the cache: access to it was revoked.");
+            }
+            catch (MiniVaultUnavailableException ex)
+            {
+                if (Volatile.Read(ref _disposed) == 0)
+                {
+                    _options.Log?.Invoke($"MiniVault background refresh of '{entry.Name}' failed: {ex.Message}");
+                    (unreachable ??= new List<CachedSecret>()).Add(entry);
+                }
             }
             catch (Exception ex)
             {
@@ -259,6 +307,15 @@ internal sealed class MiniVaultClient : IMiniVaultClient
         }
 
         if (changed) PersistDisk();
+
+        // Raised after all cache state has settled, one event per entry the pass could not reach. That entry is
+        // still what a read would be served, so this is the same signal a fallback read gives — including
+        // whether the copy has by now aged past MaxCacheAge.
+        if (unreachable is null) return;
+
+        var now = _now();
+        foreach (var entry in unreachable)
+            RaiseServedFromCache(entry.Name, now - entry.FetchedAt > _options.MaxCacheAge, entry.FetchedAt);
     }
 
     /// <summary>
@@ -279,7 +336,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
 
     private CachedSecret? TryGetCached(string name) => _memory.TryGet(name, out var entry) ? entry : null;
 
-    private CachedSecret ToEntry(string name, SecretResponse? body)
+    private CachedSecret ToEntry(string name, SecretResponse? body, string? eTag)
     {
         if (body is null)
             throw new MiniVaultRequestException($"The MiniVault server returned an empty body for secret '{name}'.");
@@ -294,13 +351,14 @@ internal sealed class MiniVaultClient : IMiniVaultClient
             throw new MiniVaultRequestException($"The MiniVault server returned a value for '{name}' that is not valid base64: {ex.Message}");
         }
 
-        return new CachedSecret(name, value, body.ContentType, body.Version, body.UpdatedAt, _now());
+        return new CachedSecret(name, value, body.ContentType, body.Version, body.UpdatedAt, _now(), eTag);
     }
 
     /// <summary>Returns a copy of <paramref name="entry"/> whose <c>FetchedAt</c> is now — the server just confirmed it.</summary>
     private CachedSecret Confirm(CachedSecret entry) =>
-        new CachedSecret(entry.Name, entry.Value, entry.ContentType, entry.Version, entry.UpdatedAt, _now());
+        new CachedSecret(entry.Name, entry.Value, entry.ContentType, entry.Version, entry.UpdatedAt, _now(), entry.ETag);
 
+    /// <summary>Drops a secret from both caches — used when the secret is deleted on the server.</summary>
     private void Invalidate(string name)
     {
         _memory.Remove(name);

@@ -18,6 +18,12 @@ public class MiniVaultClientTests : IDisposable
     private const string ClientId = "client";
     private const string ClientSecret = "secret";
 
+    /// <summary>The shortest background-refresh interval the options allow; used wherever a test needs ticks.</summary>
+    private static readonly TimeSpan RefreshTick = TimeSpan.FromSeconds(1);
+
+    /// <summary>How long a test waits for the background timer to do something before giving up.</summary>
+    private static readonly TimeSpan RefreshWait = TimeSpan.FromSeconds(15);
+
     private readonly string _dir;
 
     public MiniVaultClientTests()
@@ -61,6 +67,27 @@ public class MiniVaultClientTests : IDisposable
 
     private static IReadOnlyList<string> IfNoneMatch(HttpRequestMessage request) =>
         request.Headers.TryGetValues("If-None-Match", out var values) ? values.ToList() : Array.Empty<string>();
+
+    private static bool IsTokenRequest(HttpRequestMessage request) =>
+        request.RequestUri!.AbsolutePath.EndsWith("/v1/auth/token", StringComparison.Ordinal);
+
+    private static HttpResponseMessage TokenResponse200(string accessToken = "tok") =>
+        StubHandler.JsonResponse(HttpStatusCode.OK, new TokenResponse { AccessToken = accessToken, ExpiresIn = 3600 });
+
+    private IReadOnlyList<CachedSecret> OnDisk() => new DiskCache(_dir, ClientId, ClientSecret, null).Load();
+
+    /// <summary>Polls <paramref name="condition"/> until it holds, or fails the test when the wait runs out.</summary>
+    private static async Task WaitUntilAsync(Func<bool> condition, string because)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < RefreshWait)
+        {
+            if (condition()) return;
+            await Task.Delay(25);
+        }
+
+        throw new Shouldly.ShouldAssertException($"Timed out after {RefreshWait} waiting until {because}.");
+    }
 
     /// <summary>A handler that fails every request the way an unreachable server does.</summary>
     private sealed class OfflineHandler : HttpMessageHandler
@@ -240,13 +267,13 @@ public class MiniVaultClientTests : IDisposable
     }
 
     [Fact]
-    public async Task Set_InvalidatesCache_AndReturnsVersion()
+    public async Task Set_CachesTheWrittenValue_AndReturnsVersion()
     {
         var handler = new StubHandler();
         Token(handler);
         Secret200(handler, "a", "v1", 1);
         handler.Enqueue(HttpStatusCode.OK, new SetSecretResponse { Version = 2 });
-        Secret200(handler, "a", "v2", 2);
+        handler.Enqueue(HttpStatusCode.NotModified);
 
         using var client = new MiniVaultClient(Options(cacheDirectory: _dir), handler, () => T0);
 
@@ -254,11 +281,58 @@ public class MiniVaultClientTests : IDisposable
         var version = await client.SetSecretAsync("a", Encoding.UTF8.GetBytes("v2"), "text/plain");
 
         version.ShouldBe(2);
-        new DiskCache(_dir, ClientId, ClientSecret, null).Load().ShouldBeEmpty();
 
-        // The cache entry is gone, so the next read is unconditional.
+        // The written value replaces the previous one in both caches instead of being dropped.
+        var onDisk = OnDisk();
+        onDisk.Count.ShouldBe(1);
+        onDisk[0].Version.ShouldBe(2);
+        onDisk[0].Value.ShouldBe(Encoding.UTF8.GetBytes("v2"));
+
+        // So the next read is conditional on the version just written, and a 304 confirms it.
         (await client.GetSecretAsync("a")).AsString().ShouldBe("v2");
-        IfNoneMatch(handler.Requests[3]).ShouldBeEmpty();
+        IfNoneMatch(handler.Requests[3]).ShouldBe(new[] { "\"2\"" });
+    }
+
+    [Fact]
+    public async Task Set_LeavesTheWrittenValue_OnDisk_ForAnOfflineRestart()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        handler.Enqueue(HttpStatusCode.OK, new SetSecretResponse { Version = 4 });
+
+        using (var writer = new MiniVaultClient(Options(cacheDirectory: _dir), handler, () => T0))
+        {
+            (await writer.SetSecretAsync("a", Encoding.UTF8.GetBytes("written"), "text/plain")).ShouldBe(4);
+        }
+
+        // A brand-new client, same cache directory, with nothing reachable behind it.
+        var offline = new OfflineHandler();
+        using var restarted = new MiniVaultClient(Options(cacheDirectory: _dir), offline, () => T0);
+
+        var secret = await restarted.GetSecretAsync("a");
+
+        secret.AsString().ShouldBe("written");
+        secret.Version.ShouldBe(4);
+        secret.ContentType.ShouldBe("text/plain");
+    }
+
+    [Fact]
+    public async Task Set_ThenGet_WithRefreshInterval_ReturnsWrittenValue_WithoutARequest()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        handler.Enqueue(HttpStatusCode.OK, new SetSecretResponse { Version = 2 });
+
+        using var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMinutes(30)), handler, () => T0);
+
+        await client.SetSecretAsync("a", Encoding.UTF8.GetBytes("v2"), "text/plain");
+        var before = handler.Requests.Count;
+
+        var secret = await client.GetSecretAsync("a");
+
+        secret.AsString().ShouldBe("v2");
+        secret.Version.ShouldBe(2);
+        handler.Requests.Count.ShouldBe(before);
     }
 
     [Fact]
@@ -318,11 +392,42 @@ public class MiniVaultClientTests : IDisposable
     }
 
     [Fact]
-    public async Task RefreshInterval_ShortCircuit_RaisesStaleEvent_WhenOld()
+    public async Task RefreshInterval_StaleEntry_ServerReachable_RefreshesLive_WithoutEvent()
     {
         var handler = new StubHandler();
         Token(handler);
         Secret200(handler, "a", "v1", 1);
+        Token(handler); // the first token has expired by the time the clock has moved eight days on
+        handler.Enqueue(HttpStatusCode.NotModified);
+
+        var now = T0;
+        using var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMinutes(30)), handler, () => now);
+
+        await client.GetSecretAsync("a");
+
+        now = T0.AddDays(8);
+        var raised = 0;
+        client.SecretServedFromCache += (_, _) => raised++;
+
+        var before = handler.Requests.Count;
+        var secret = await client.GetSecretAsync("a");
+
+        // An entry past MaxCacheAge is not served silently from memory: the read goes to the server, and the
+        // server is up, so what comes back is a confirmed live read — no cache event at all.
+        secret.AsString().ShouldBe("v1");
+        handler.Requests.Count.ShouldBeGreaterThan(before);
+        IfNoneMatch(handler.Requests[handler.Requests.Count - 1]).ShouldBe(new[] { "\"1\"" });
+        raised.ShouldBe(0);
+        handler.Remaining.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task RefreshInterval_StaleEntry_ServerUnreachable_RaisesStaleEvent()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+        handler.Fallback = _ => throw new HttpRequestException("offline");
 
         var now = T0;
         using var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMinutes(30)), handler, () => now);
@@ -333,11 +438,9 @@ public class MiniVaultClientTests : IDisposable
         CacheServedEventArgs? served = null;
         client.SecretServedFromCache += (_, e) => served = e;
 
-        var before = handler.Requests.Count;
         var secret = await client.GetSecretAsync("a");
 
         secret.AsString().ShouldBe("v1");
-        handler.Requests.Count.ShouldBe(before);
         served.ShouldNotBeNull();
         served!.Name.ShouldBe("a");
         served.Stale.ShouldBeTrue();
@@ -359,16 +462,16 @@ public class MiniVaultClientTests : IDisposable
             if (response.Headers.ETag?.Tag == "\"2\"") v2Dequeued.TrySetResult(true);
         };
 
-        using var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMilliseconds(50)), handler, () => T0);
+        using var client = new MiniVaultClient(Options(refreshInterval: RefreshTick), handler, () => T0);
 
         (await client.GetSecretAsync("a")).Version.ShouldBe(1);
 
-        var signalled = await Task.WhenAny(v2Dequeued.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        var signalled = await Task.WhenAny(v2Dequeued.Task, Task.Delay(RefreshWait));
         signalled.ShouldBe(v2Dequeued.Task);
 
         Secret? latest = null;
         var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(1))
+        while (sw.Elapsed < TimeSpan.FromSeconds(5))
         {
             latest = await client.GetSecretAsync("a");
             if (latest.Version == 2) break;
@@ -381,13 +484,114 @@ public class MiniVaultClientTests : IDisposable
     }
 
     [Fact]
+    public async Task BackgroundRefresh_404_EvictsTheSecretFromMemoryAndDisk()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+        handler.Fallback = request => IsTokenRequest(request)
+            ? TokenResponse200()
+            : StubHandler.JsonResponse(HttpStatusCode.NotFound, new ErrorResponse { Error = ErrorResponse.NotFound });
+
+        var logs = new List<string>();
+        var options = Options(cacheDirectory: _dir, refreshInterval: RefreshTick);
+        options.Log = line => { lock (logs) logs.Add(line); };
+
+        using var client = new MiniVaultClient(options, handler, () => T0);
+
+        await client.GetSecretAsync("a");
+        OnDisk().ShouldNotBeEmpty();
+
+        await WaitUntilAsync(() => OnDisk().Count == 0, "the background refresh has dropped the deleted secret from disk");
+
+        // Nothing is left in memory either, so the next read goes to the server and surfaces the 404 rather
+        // than handing out a secret the server no longer has.
+        await Should.ThrowAsync<MiniVaultNotFoundException>(() => client.GetSecretAsync("a"));
+        lock (logs) logs.ShouldContain(l => l.Contains("the server no longer has it"));
+    }
+
+    [Fact]
+    public async Task BackgroundRefresh_403_EvictsTheSecret_WhenTheGrantIsRevoked()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+        handler.Fallback = request => IsTokenRequest(request)
+            ? TokenResponse200()
+            : StubHandler.JsonResponse(HttpStatusCode.Forbidden, new ErrorResponse { Error = ErrorResponse.Forbidden });
+
+        var logs = new List<string>();
+        var options = Options(cacheDirectory: _dir, refreshInterval: RefreshTick);
+        options.Log = line => { lock (logs) logs.Add(line); };
+
+        using var client = new MiniVaultClient(options, handler, () => T0);
+
+        await client.GetSecretAsync("a");
+        OnDisk().ShouldNotBeEmpty();
+
+        await WaitUntilAsync(() => OnDisk().Count == 0, "the background refresh has dropped the forbidden secret from disk");
+
+        await Should.ThrowAsync<MiniVaultForbiddenException>(() => client.GetSecretAsync("a"));
+        lock (logs) logs.ShouldContain(l => l.Contains("access to it was revoked"));
+    }
+
+    [Fact]
+    public async Task BackgroundRefresh_ServerUnreachable_RaisesServedFromCache_ForTheEntryItCouldNotReach()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+        handler.Fallback = _ => throw new HttpRequestException("offline");
+
+        using var client = new MiniVaultClient(Options(refreshInterval: RefreshTick), handler, () => T0);
+
+        var raised = new TaskCompletionSource<CacheServedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.SecretServedFromCache += (_, e) => raised.TrySetResult(e);
+
+        await client.GetSecretAsync("a");
+
+        (await Task.WhenAny(raised.Task, Task.Delay(RefreshWait))).ShouldBe(raised.Task);
+
+        // No call to GetSecretAsync was involved: the refresh pass itself reports what it could not confirm.
+        var served = await raised.Task;
+        served.Name.ShouldBe("a");
+        served.FetchedAt.ShouldBe(T0);
+        served.Stale.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task BackgroundRefresh_ServerUnreachable_ReportsStale_OnceThePassIsPastMaxCacheAge()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+        handler.Fallback = _ => throw new HttpRequestException("offline");
+
+        var now = T0;
+        using var client = new MiniVaultClient(Options(refreshInterval: RefreshTick), handler, () => now);
+
+        await client.GetSecretAsync("a");
+        now = T0.AddDays(8);
+
+        var raised = new TaskCompletionSource<CacheServedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.SecretServedFromCache += (_, e) => raised.TrySetResult(e);
+
+        (await Task.WhenAny(raised.Task, Task.Delay(RefreshWait))).ShouldBe(raised.Task);
+
+        var served = await raised.Task;
+        served.Name.ShouldBe("a");
+        served.Stale.ShouldBeTrue();
+        served.FetchedAt.ShouldBe(T0);
+    }
+
+    [Fact]
     public async Task Dispose_StopsTimer()
     {
         var handler = new StubHandler();
         Token(handler);
         Secret200(handler, "a", "v1", 1);
 
-        var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMilliseconds(50)), handler, () => T0);
+        var client = new MiniVaultClient(Options(refreshInterval: RefreshTick), handler, () => T0);
         await client.GetSecretAsync("a");
 
         client.Dispose();
@@ -395,9 +599,79 @@ public class MiniVaultClientTests : IDisposable
         // Dispose was called cannot be mistaken for the timer still running afterwards.
         var after = handler.Requests.Count;
 
-        await Task.Delay(500);
+        // Comfortably longer than two refresh intervals, so a timer that was still running would show up.
+        await Task.Delay(TimeSpan.FromSeconds(2.5));
 
         handler.Requests.Count.ShouldBe(after);
+    }
+
+    [Fact]
+    public async Task Get_TwoCallersHoldingTheSameStaleToken_CauseExactlyOneReLogin()
+    {
+        var handler = new StaleTokenHandler(callers: 2);
+
+        using var client = new MiniVaultClient(Options(), handler, () => T0);
+
+        var first = client.GetSecretAsync("a");
+        var second = client.GetSecretAsync("b");
+        var secrets = await Task.WhenAll(first, second);
+
+        secrets.Select(s => s.AsString()).OrderBy(v => v, StringComparer.Ordinal).ShouldBe(new[] { "value-a", "value-b" });
+
+        // One login for the stale token, one for the replacement — not one per caller that saw the 401.
+        handler.Logins.ShouldBe(2);
+        handler.Unauthorized.ShouldBe(2);
+    }
+
+    /// <summary>
+    /// Issues a first ("stale") token, answers 401 to every request that presents it — holding each such
+    /// request until all of the callers have arrived, so they all observe the failure while still holding the
+    /// same token — and answers 200 to anything presenting a later token.
+    /// </summary>
+    private sealed class StaleTokenHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource<bool> _allArrived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly int _callers;
+        private int _logins;
+        private int _arrived;
+        private int _unauthorized;
+
+        public StaleTokenHandler(int callers) { _callers = callers; }
+
+        public int Logins => Volatile.Read(ref _logins);
+        public int Unauthorized => Volatile.Read(ref _unauthorized);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (IsTokenRequest(request))
+            {
+                var login = Interlocked.Increment(ref _logins);
+                return TokenResponse200(login == 1 ? "stale" : "fresh-" + login);
+            }
+
+            var name = request.RequestUri!.AbsolutePath.Substring("/v1/secrets/".Length);
+
+            if (request.Headers.Authorization!.Parameter == "stale")
+            {
+                if (Interlocked.Increment(ref _arrived) == _callers) _allArrived.TrySetResult(true);
+                await _allArrived.Task.ConfigureAwait(false);
+
+                Interlocked.Increment(ref _unauthorized);
+                return StubHandler.JsonResponse(HttpStatusCode.Unauthorized, new ErrorResponse { Error = ErrorResponse.Unauthorized });
+            }
+
+            return StubHandler.JsonResponse(
+                HttpStatusCode.OK,
+                new SecretResponse
+                {
+                    Name = name,
+                    Value = Convert.ToBase64String(Encoding.UTF8.GetBytes("value-" + name)),
+                    ContentType = "text/plain",
+                    Version = 1,
+                    UpdatedAt = T0,
+                },
+                response => response.Headers.ETag = new EntityTagHeaderValue("\"1\""));
+        }
     }
 
     [Fact]

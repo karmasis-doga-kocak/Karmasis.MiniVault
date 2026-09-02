@@ -62,7 +62,7 @@ public class MiniVaultHttpTests
         var (http, handler) = CreateSut();
         handler.Enqueue(HttpStatusCode.NotModified, configure: response => response.Headers.ETag = new EntityTagHeaderValue("\"3\""));
 
-        var result = await http.GetSecretAsync("a", "tok", 3, CancellationToken.None);
+        var result = await http.GetSecretAsync("a", "tok", "\"3\"", CancellationToken.None);
 
         result.NotModified.ShouldBeTrue();
         result.ETag.ShouldBe("\"3\"");

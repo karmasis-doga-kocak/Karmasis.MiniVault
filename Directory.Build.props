@@ -7,5 +7,9 @@
     <Company>Karmasis</Company>
     <Copyright>Copyright © 2026 Karmasis. All rights reserved.</Copyright>
     <Version>0.1.0</Version>
+    <PackageProjectUrl>https://github.com/karmasis-doga-kocak/Karmasis.MiniVault</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/karmasis-doga-kocak/Karmasis.MiniVault</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>karmasis;minivault;secrets</PackageTags>
   </PropertyGroup>
 </Project>

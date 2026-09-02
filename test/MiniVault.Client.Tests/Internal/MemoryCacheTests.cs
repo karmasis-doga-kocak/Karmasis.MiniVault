@@ -37,7 +37,7 @@ public class MemoryCacheTests
         cache.Set(Make("db/password", version: 2));
 
         cache.TryGet("db/password", out var got).ShouldBeTrue();
-        got.Version.ShouldBe(2);
+        got!.Version.ShouldBe(2);
     }
 
     [Fact]

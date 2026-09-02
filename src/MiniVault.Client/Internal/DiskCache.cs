@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -16,10 +17,19 @@ namespace MiniVault.Client.Internal;
 /// (<c>clientId</c> + <c>clientSecret</c>). The file is unreadable to anyone who does not know those
 /// credentials, and a different <c>clientSecret</c> (or a corrupt/foreign file) yields an empty cache rather
 /// than an exception.
+/// <para>
+/// Two file formats are accepted on load: version 2, which records each entry's entity tag, and version 1,
+/// which predates it — a version 1 entry gets the tag the server is known to produce for its version,
+/// <c>"&lt;version&gt;"</c>, so upgrading in place never costs a full re-read. Saving always writes version 2.
+/// </para>
 /// </summary>
 internal sealed class DiskCache
 {
-    private const int FormatVersion = 1;
+    /// <summary>The format this instance writes. Version 2 added the per-entry <c>eTag</c>.</summary>
+    private const int FormatVersion = 2;
+
+    /// <summary>The oldest format still readable: version 1 entries simply carry no <c>eTag</c>.</summary>
+    private const int MinimumReadableFormatVersion = 1;
     private const string HkdfInfo = "minivault-cache";
 
     private readonly string _directory;
@@ -71,7 +81,7 @@ internal sealed class DiskCache
                     var file = JsonSerializer.Deserialize<CacheFileDto>(json, JsonOptions)
                         ?? throw new JsonException("Cache file deserialized to null.");
 
-                    if (file.FormatVersion != FormatVersion)
+                    if (file.FormatVersion < MinimumReadableFormatVersion || file.FormatVersion > FormatVersion)
                         throw new JsonException($"Unsupported cache format version {file.FormatVersion}.");
 
                     var entries = file.Entries ?? new List<CacheEntryDto>();
@@ -82,7 +92,8 @@ internal sealed class DiskCache
                             e.ContentType,
                             e.Version,
                             e.UpdatedAt,
-                            e.FetchedAt))
+                            e.FetchedAt,
+                            e.ETag ?? "\"" + e.Version.ToString(CultureInfo.InvariantCulture) + "\""))
                         .ToList();
                 }
                 finally
@@ -122,6 +133,7 @@ internal sealed class DiskCache
                 Version = e.Version,
                 UpdatedAt = e.UpdatedAt,
                 FetchedAt = e.FetchedAt,
+                ETag = e.ETag,
             }).ToList(),
         };
 
@@ -220,5 +232,9 @@ internal sealed class DiskCache
 
         [JsonPropertyName("fetchedAt")]
         public DateTimeOffset FetchedAt { get; set; }
+
+        /// <summary>Absent in version 1 files, where it is synthesized from the version on load.</summary>
+        [JsonPropertyName("eTag")]
+        public string? ETag { get; set; }
     }
 }
