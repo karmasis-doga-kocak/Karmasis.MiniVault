@@ -85,3 +85,93 @@ Starts the server. It refuses to start when the vault is not initialized or the 
 ## Backups
 
 Back up two things separately: the database (normal SQL Server backup) and the recovery material. Neither is useful alone.
+
+## Clients and roles
+
+Services that call MiniVault authenticate as **clients**. A client has an id, a secret, and zero or more **roles**.
+
+A role is just a name plus a list of rules. Each rule is a scope prefix and a permission (`read`, or `write` which includes `read`). A client can read or write a secret if any of its roles has a rule whose scope is a prefix of the secret's name. A role with no rules grants nothing.
+
+### `minivault role add <name> [--description "..."]`
+
+Creates a role.
+
+```
+Role created: collector-reader
+```
+
+### `minivault role remove <name>`
+
+Deletes a role, its rules, and its assignment to any client.
+
+```
+Role removed: collector-reader
+```
+
+### `minivault role grant <name> --scope <prefix> --permission read|write`
+
+Grants a permission on a scope to a role. Granting again on the same scope replaces the existing rule (it does not add a second one).
+
+```
+Granted Read on 'dataskope/collector/' to collector-reader
+```
+
+### `minivault role list`
+
+Lists every role and its rules, one line per role.
+
+```
+collector-reader: dataskope/collector/=Read
+empty-role: (no rules)
+```
+
+### `minivault client add <id> [--role <r> ...]`
+
+Creates a client and prints its secret. `--role` can be repeated to assign roles at creation time.
+
+```
+Client created: dataskope-collector
+Client secret: 8k3F2v9qA1zR7pC0eQ6nS4gU2y5T0hJ3W8lD1bXfM6o=
+Store this secret now; it is not shown again.
+```
+
+The secret is only ever shown here. Store it in the consuming service's own secret storage — on Windows, protect it with DPAPI before it touches disk.
+
+### `minivault client remove <id>`
+
+Deletes a client. It can no longer authenticate; any token it already holds still works until it expires (15 minutes by default).
+
+```
+Client removed: dataskope-collector
+```
+
+### `minivault client assign <id> --role <r>`
+
+Assigns an existing role to an existing client. Assigning a role the client already has is a no-op.
+
+```
+Assigned role collector-reader to dataskope-collector
+```
+
+### `minivault client list`
+
+Lists every client, whether it is enabled, and its roles.
+
+```
+dataskope-collector [enabled]: collector-reader
+other-client [disabled]: (no roles)
+```
+
+### Example: onboarding a new client
+
+```
+minivault role add collector-reader --description "reads collector secrets"
+minivault role grant collector-reader --scope dataskope/collector/ --permission read
+minivault client add dataskope-collector --role collector-reader
+```
+
+The last command prints the client's secret once. Copy it into the consuming service's configuration immediately; MiniVault does not store or display it again.
+
+### Audit trail
+
+Every command above writes an audit row with client id `cli`. The action names are `client.add`, `client.remove`, `client.assign`, `role.add`, `role.remove`, `role.grant`.
