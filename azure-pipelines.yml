@@ -10,7 +10,13 @@
 # This pipeline assumes a devops-vg variable group scoped to this project/pipeline (same
 # pattern as Karmasis.Cryptography) supplying at least: vgMAJOR, vgMINOR, vgPATCH, vgRC,
 # project, groupId, solution (= Karmasis.MiniVault.sln), BuildConfiguration (= Release),
-# BuildPlatform, dockerRegistry, and (for the docker stage) registry credentials.
+# BuildPlatform, dockerRegistry, and (for the docker stage) registry credentials
+# (dockerRegistryUser, dockerRegistryPassword - the latter marked secret).
+#
+# The msi stage additionally needs AdvancedInstallerPath: the folder containing
+# AdvancedInstaller.com on the agent, e.g.
+# "C:\Program Files (x86)\Caphyon\Advanced Installer 22.8\bin\x86". It is used to stamp the
+# pipeline's image_version into the .aip before the MSI is built.
 #
 # *** IMPORTANT - restore will currently FAIL on this branch ***
 # Karmasis.MiniVault.Client (and therefore MiniVault.Client.DependencyInjection and the
@@ -271,10 +277,24 @@ stages:
       env:
         VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: $(VSS_NUGET_EXTERNAL_FEED_ENDPOINTS)
 
-    - script: |
-        echo "$(dockerRegistryPassword)" | docker login $(dockerRegistry) --username $(dockerRegistryUser) --password-stdin
-        docker push $(dockerRegistry)/karmasis/minivault:$(image_version)
-      displayName: 'docker push'
+    # The registry password is mapped in through env: and read as $env:..., never interpolated into
+    # the script body: $(dockerRegistryPassword) would be expanded before the script runs, so the
+    # secret would sit in the generated command line (visible to anything that can list processes on
+    # the agent) and would defeat the log-masking on a failure that echoes the command.
+    # Each native call is checked explicitly - a script task only fails on the LAST command's exit
+    # code, so a failed login followed by a failed push used to report only the push.
+    - task: PowerShell@2
+      displayName: 'docker login and push'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $env:DOCKER_REGISTRY_PASSWORD | docker login $(dockerRegistry) --username $(dockerRegistryUser) --password-stdin
+          if ($LASTEXITCODE -ne 0) { throw "docker login failed with exit code $LASTEXITCODE" }
+
+          docker push $(dockerRegistry)/karmasis/minivault:$(image_version)
+          if ($LASTEXITCODE -ne 0) { throw "docker push failed with exit code $LASTEXITCODE" }
+      env:
+        DOCKER_REGISTRY_PASSWORD: $(dockerRegistryPassword)
 
 # ---------------------------------------------------------------------------------------
 # Stage 4 (optional, off by default): build the custom actions and the MSI. Turn on by
@@ -287,6 +307,8 @@ stages:
   displayName: msi
   dependsOn: buildAndTest
   condition: and(succeeded(), eq(variables['buildMsi'], 'true'))
+  variables:
+    image_version: $[ stageDependencies.buildAndTest.buildAndTest.outputs['setVersion.image_version'] ]
   jobs:
   - job: buildMsi
     steps:
@@ -314,11 +336,24 @@ stages:
     # actions csproj) lives on artifactrepodev only, and this classic csproj must be built
     # with MSBuild - `dotnet build` fails with CS0246 (see the csproj header comment and
     # setups/AdvancedInstaller/README.md, "Building the custom actions").
+    # RestoreConfigFile is resolved relative to each project's own directory, not to the repo root,
+    # so it has to be an absolute path here - a bare 'nuget-dev.config' would be looked for next to
+    # the csproj and silently fall back to the machine-wide NuGet.config. The branch condition
+    # matches the buildAndTest stage: dev/feature restores from artifactrepodev, master from
+    # artifactrepo.
     - task: MSBuild@1
-      displayName: 'Restore custom actions (MSBuild, nuget-dev.config)'
+      condition: ne(variables['Build.SourceBranch'], 'refs/heads/master')
+      displayName: 'Restore custom actions (dev/feature - nuget-dev.config)'
       inputs:
         solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
-        msbuildArguments: '/t:Restore /p:RestoreConfigFile=nuget-dev.config'
+        msbuildArguments: '/t:Restore /p:RestoreConfigFile=$(Build.SourcesDirectory)/nuget-dev.config'
+
+    - task: MSBuild@1
+      condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+      displayName: 'Restore custom actions (master - nuget-release.config)'
+      inputs:
+        solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
+        msbuildArguments: '/t:Restore /p:RestoreConfigFile=$(Build.SourcesDirectory)/nuget-release.config'
 
     - task: MSBuild@1
       displayName: 'Build custom actions (MSBuild, Release)'
@@ -326,6 +361,16 @@ stages:
         solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
         configuration: 'Release'
         msbuildArguments: '/t:Build'
+
+    # The setup solution is not part of Karmasis.MiniVault.sln, so the buildAndTest stage never runs
+    # these tests: without this step the custom actions ship untested. net48 tests, run with the .NET
+    # CLI against the MSBuild output above (--no-build, same Release configuration).
+    - task: DotNetCoreCLI@2
+      displayName: 'Run custom action tests'
+      inputs:
+        command: 'test'
+        projects: 'setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions.Tests/Karmasis.MiniVault.CustomActions.Tests.csproj'
+        arguments: '--configuration Release --no-build --logger trx --results-directory $(Agent.TempDirectory)'
 
     # NOTE (agent requirement): this task needs a licensed Advanced Installer install on the
     # agent - AdvancedInstaller.com on PATH (installed by the "Advanced Installer Tool
@@ -337,6 +382,20 @@ stages:
     # not been verified against the actually-installed AdvancedInstaller@2 marketplace
     # extension on the target agent - confirm them against that extension's task.json
     # before turning buildMsi on.
+    # The .aip carries ProductVersion as a literal (0.1.0). Without this step every MSI the pipeline
+    # produces would claim that same version, so Windows would treat a new build as a reinstall of the
+    # old one and the MsiUpgradeComponent rows would never fire. /SetVersion rewrites ProductVersion
+    # (and, because the ProductCode row is marked Type="16", lets Advanced Installer generate a new
+    # ProductCode for the new version). This edits the working copy only; it is not committed back.
+    - task: PowerShell@2
+      displayName: 'Stamp ProductVersion $(image_version) into the .aip'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $aip = Join-Path "$(Build.SourcesDirectory)" 'setups\AdvancedInstaller\Karmasis.MiniVault\Karmasis.MiniVault.aip'
+          & "$(AdvancedInstallerPath)\AdvancedInstaller.com" /edit $aip /SetVersion $(image_version)
+          if ($LASTEXITCODE -ne 0) { throw "AdvancedInstaller.com /SetVersion failed with exit code $LASTEXITCODE" }
+
     - task: AdvancedInstaller@2
       displayName: 'Build Karmasis.MiniVault.msi'
       inputs:

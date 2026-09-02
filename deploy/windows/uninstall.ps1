@@ -44,16 +44,20 @@ if (-not (Test-IsAdministrator)) {
 
 $programDataDir = Join-Path $env:ProgramData 'MiniVault'
 
+# WQL string literals escape a single quote by doubling it. Without this a -ServiceName containing an
+# apostrophe produces an invalid query (or, worse, a query with an injected clause).
+$serviceNameFilter = "Name='" + ($ServiceName -replace "'", "''") + "'"
+
 Write-Host "Uninstalling MiniVault service '$ServiceName'."
 
-$service = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
+$service = Get-CimInstance -ClassName Win32_Service -Filter $serviceNameFilter -ErrorAction SilentlyContinue
 if ($service) {
     Write-Host "Stopping service '$ServiceName'..."
     & sc.exe stop $ServiceName | Out-Null
 
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline) {
-        $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
+        $service = Get-CimInstance -ClassName Win32_Service -Filter $serviceNameFilter -ErrorAction SilentlyContinue
         if (-not $service -or $service.State -eq 'Stopped') { break }
         Start-Sleep -Seconds 1
     }
