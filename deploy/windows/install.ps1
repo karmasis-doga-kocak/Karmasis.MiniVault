@@ -58,6 +58,11 @@ param(
     # first. Start it afterwards with: sc.exe start <ServiceName>
     [switch]$SkipServiceStart,
 
+    # Skip Step 4 ('minivault.exe init') entirely. Use this when restoring an existing vault onto a new
+    # host: install everything else (files, config, ACLs, service), then run 'minivault.exe recover' with
+    # the recovery material instead of creating a brand-new vault.
+    [switch]$SkipInit,
+
     # Print the install plan and exit 0 without making any changes. Does not require elevation.
     [switch]$WhatIfMode
 )
@@ -324,8 +329,12 @@ if (-not $WhatIfMode) {
 # ---------------------------------------------------------------------------
 # Step 4: initialize the vault.
 # ---------------------------------------------------------------------------
-Write-Host "Step 4: Run 'minivault.exe init --recovery $Recovery' and confirm the recovery material has been saved."
-if (-not $WhatIfMode) {
+if ($SkipInit) {
+    Write-Host "Step 4: Skipped (-SkipInit). Note: this host has no vault yet - after the service is installed, run 'minivault.exe recover --new-master-key auto --share ... --share ...' (or --recovery-key) with your existing recovery material to restore it, before starting the service."
+} else {
+    Write-Host "Step 4: Run 'minivault.exe init --recovery $Recovery' and confirm the recovery material has been saved."
+}
+if (-not $WhatIfMode -and -not $SkipInit) {
     $exePath = Join-Path $InstallDir 'minivault.exe'
     $timestamp = Get-Date -Format 'yyyyMMddHHmmss'
     $outFile = Join-Path $programDataDir "recovery-$timestamp.txt"

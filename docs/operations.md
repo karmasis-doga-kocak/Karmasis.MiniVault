@@ -1,6 +1,6 @@
 # MiniVault operations
 
-This page covers the operator commands. Installation (Windows setup, Docker) is documented in a later release.
+This page covers installation, the operator commands, TLS, backup/restore, upgrading, and troubleshooting.
 
 ## How the keys fit together
 
@@ -9,6 +9,168 @@ This page covers the operator commands. Installation (Windows setup, Docker) is 
 - **Recovery key** — shown once by `init`. Lets you replace a lost or forgotten master key. Keep it offline; in Shamir mode split it between people.
 
 Losing both the master key and the recovery material means the secrets are gone. There is no back door.
+
+## Installation
+
+There are three ways to install MiniVault: the Windows MSI, the `install.ps1` script, and a Docker
+container. All three end up running the same `minivault.exe`/`minivault` binary and writing the same
+configuration shape; pick whichever fits how the target host is managed.
+
+### Windows (MSI)
+
+The MSI installs the server as a Windows service in one step. It is configured entirely through MSI
+properties (`MV_*`):
+
+| Property | Default | Meaning |
+|---|---|---|
+| `MV_CONNECTIONSTRING` | *(empty, required)* | `ConnectionStrings:MiniVault`. |
+| `MV_SERVICEACCOUNT` | `LocalSystem` | Account the service runs as; also the identity granted read access to `%ProgramData%\MiniVault`. |
+| `MV_RECOVERY` | `single` | `single` or `shamir`. |
+| `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
+| `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
+| `MV_MASTERKEY` | *(empty)* | Optional: derive the master key from this password instead of generating one. |
+| `MV_CERT_PATH` | *(empty)* | PFX path. Exactly one of this or `MV_CERT_THUMBPRINT`. |
+| `MV_CERT_PASSWORD` | *(empty)* | PFX password. Stored in plain text in `appsettings.json`. |
+| `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. |
+| `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
+
+**Interactive install**: today the MSI runs through the standard Advanced Installer dialogs only —
+the custom pages that would expose `MV_*` as form fields (connection string, master key, TLS,
+recovery) are a designer follow-up (see `setups/AdvancedInstaller/README.md`, "Designer follow-ups")
+and are not wired into the install sequence yet. Until then, use the silent install below (from a
+shortcut, a script, or `msiexec /i ... MV_...=...` with the UI still showing) to actually configure
+the install.
+
+**Silent install**:
+
+```powershell
+msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log ^
+  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" ^
+  MV_RECOVERY=shamir MV_SHARES=3 MV_THRESHOLD=2 ^
+  MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567 ^
+  MV_URL=https://0.0.0.0:8200
+```
+
+**What the installer does**, in order:
+
+1. Installs the publish output to `[ProgramFiles64Folder]Karmasis\MiniVault`.
+2. Creates `%ProgramData%\MiniVault` and grants SYSTEM + Administrators full control.
+3. Writes `%ProgramData%\MiniVault\appsettings.json` from the `MV_*` properties and re-applies the
+   protected ACL (the same grants `install.ps1` applies with `icacls`).
+4. Runs `minivault.exe init --recovery <mode> --out %ProgramData%\MiniVault\recovery-<timestamp>.txt`.
+5. Registers the `KarmasisMiniVault` service and starts it.
+6. (Not sequenced into the install; available as a "Test connection" action once the designer pages
+   exist.) Tests the connection string in `MV_CONNECTIONSTRING` and reports back via `MV_SQL_OK`/`MV_SQL_ERROR`.
+
+The recovery material is written to `%ProgramData%\MiniVault\recovery-<timestamp>.txt` (a deferred
+custom action cannot show it in the UI). **Open that file, copy the recovery key or shares to a safe
+offline location, and delete it** — it is not shown again and is readable only by SYSTEM and
+Administrators.
+
+**On upgrade**: step 4 (`init`) is skipped. The installer treats the server's "already initialized"
+response as a no-op instead of failing the upgrade, so re-running or upgrading the MSI over an
+existing install does not touch the existing vault, master key, or data. See "Upgrading" below for
+what you still need to run by hand (`minivault migrate`).
+
+### Windows (script)
+
+`install.ps1` does the same work from PowerShell, for hosts that are provisioned by script rather
+than MSI. Publish first:
+
+```powershell
+dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64
+```
+
+Then, with a certificate from a PFX file:
+
+```powershell
+.\install.ps1 `
+  -SourceDir C:\publish\minivault `
+  -ConnectionString "Server=sql01;Database=MiniVault;Integrated Security=true" `
+  -CertificatePath C:\certs\minivault.pfx `
+  -CertificatePassword "the-pfx-password"
+```
+
+Or with a certificate already imported into a machine store:
+
+```powershell
+.\install.ps1 `
+  -SourceDir C:\publish\minivault `
+  -ConnectionString "Server=sql01;Database=MiniVault;Integrated Security=true" `
+  -CertificateThumbprint 0123456789ABCDEF0123456789ABCDEF01234567
+```
+
+For a strictly ordered rollout — grant the SQL login before the service ever tries to start — pass
+`-SkipServiceStart`. The script prints the SQL grant script (a `CREATE LOGIN`/`CREATE USER`/`ALTER
+ROLE db_owner` script for the service account) right before it would otherwise start the service; run
+that on the target SQL Server, then start the service yourself:
+
+```powershell
+.\install.ps1 -SourceDir C:\publish\minivault -ConnectionString "..." -CertificateThumbprint ... -SkipServiceStart
+# apply the printed SQL grant on the target SQL Server, then:
+sc.exe start KarmasisMiniVault
+```
+
+`-SkipInit` skips vault creation entirely (files, config, ACLs and the service are still installed);
+it is for restoring an existing vault onto a new host rather than creating one — see "Backup and
+restore" below.
+
+Uninstall:
+
+```powershell
+.\uninstall.ps1 -ServiceName KarmasisMiniVault -InstallDir "C:\Program Files\Karmasis\MiniVault"
+```
+
+This removes the service and the install directory but leaves `%ProgramData%\MiniVault` (the master
+key and machine config) in place. Add `-PurgeData -Force` only when the vault and its database are
+also being decommissioned — see `deploy/windows/README.md` for the full parameter list and the
+`-WhatIfMode` preview flag.
+
+### Docker
+
+Build the image, generate a certificate, initialize, then run:
+
+```powershell
+# Build (local dev — stages nupkgs from the local-nuget folder feed):
+.\docker\build-local.ps1
+# CI builds instead pass a private-feed NuGet config as a build arg:
+#   docker build -f docker/Dockerfile --build-arg NUGET_CONFIG=nuget-dev.config -t karmasis/minivault:ci .
+
+# Generate a self-signed PFX for local/dev use (PowerShell):
+$pwd = ConvertTo-SecureString -String "change-me" -Force -AsPlainText
+$cert = New-SelfSignedCertificate -DnsName "localhost" -CertStoreLocation "cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(2)
+New-Item -ItemType Directory -Force -Path .\docker\certs | Out-Null
+Export-PfxCertificate -Cert $cert -FilePath .\docker\certs\minivault.pfx -Password $pwd | Out-Null
+Remove-Item "cert:\CurrentUser\My\$($cert.Thumbprint)"
+
+# Initialize (one-shot job, profile "init"):
+docker compose -f docker/docker-compose.yml --env-file docker/.env --profile init run --rm minivault-init
+
+# Run:
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d minivault
+
+# Health:
+curl -k https://localhost:8200/v1/health
+
+# Logs:
+docker compose -f docker/docker-compose.yml logs -f minivault
+```
+
+Notes:
+
+- The container runs as a non-root user (uid 1654); the mounted PFX must be readable by it
+  (`chmod 644 certs/minivault.pfx`).
+- `minivault-init`'s stdout is the only place the master key and recovery material appear (with
+  `MasterKey__Provider=Environment`, which cannot store the key itself). Copy the master key into
+  `docker/.env` as `MINIVAULT__MASTERKEY` and the recovery key/shares into your own safe storage,
+  then clear the init container's log: `docker compose -f docker/docker-compose.yml --profile init rm -f minivault-init`.
+- Both services declare `extra_hosts: ["host.docker.internal:host-gateway"]` so a host SQL Server is
+  reachable as `host.docker.internal` from a plain Linux Docker engine (a no-op, but harmless, on
+  Docker Desktop, where that name already resolves).
+- `docker/.env` (holding the connection string, master key and PFX password) and `docker/certs/` are
+  git-ignored; never commit either.
+
+See `docker/README.md` for the full walkthrough, including the CI restore caveat.
 
 ## Commands
 
@@ -70,6 +232,27 @@ minivault rotate-dek
 ```
 
 Restart the MiniVault service after rotating; the running server loads data keys at startup and will not see the new version until it restarts.
+
+### `minivault migrate`
+
+Applies any pending database schema migrations. Run it after upgrading the binaries, before starting
+the service, so the schema matches the new code — `init` is the only other place migrations run, and
+it only runs once. `migrate` is safe to run on a database that has not been initialized yet (it just
+creates the schema) and safe to run repeatedly: a second run with nothing pending is a no-op.
+
+```
+minivault migrate
+```
+
+```
+Applied 1 migration(s).
+```
+
+or, when nothing was pending:
+
+```
+Database is up to date.
+```
 
 ### `minivault` (no command) / `minivault serve`
 
@@ -187,9 +370,58 @@ Every command above writes an audit row with client id `cli`. The action names a
 | `Dpapi` (default) | `%ProgramData%\MiniVault\masterkey.bin`, DPAPI LocalMachine | Windows only. Bound to the machine: the file cannot be read on another host. `MasterKey:Path` overrides the location. |
 | `Environment` | `MINIVAULT__MASTERKEY` (base64, 32 bytes) | Containers / Linux. `init` prints the value once. |
 
-## Backups
+## Backup and restore
 
-Back up two things separately: the database (normal SQL Server backup) and the recovery material. Neither is useful alone.
+Back up two things, separately: the database (normal SQL Server backup) and the recovery material.
+Neither is useful alone — the database holds secrets encrypted by data keys that are themselves
+wrapped by the recovery key, and the recovery key exists only in whatever offline location you put it
+when `init` printed it.
+
+**Do not try to back up the master key file** (`%ProgramData%\MiniVault\masterkey.bin`, DPAPI). It is
+protected with `CurrentMachine`-scoped DPAPI, so a copy of the file is unreadable on any host other
+than the one it was created on — restoring it to a new machine does not work, by design. The recovery
+material is what stands in for it when moving to a new host: `minivault recover` builds a fresh master
+key from the recovery key or Shamir shares and rewraps the existing data keys with it.
+
+### Restoring onto a new host
+
+1. **Install, without creating a new vault.** Run `install.ps1` with `-SkipInit` (files, config, ACLs
+   and the service are installed; no `init` runs):
+
+   ```powershell
+   .\install.ps1 -SourceDir C:\publish\minivault -ConnectionString "Server=sql01;Database=MiniVault;Integrated Security=true" -CertificateThumbprint ... -SkipInit -SkipServiceStart
+   ```
+
+   `-SkipServiceStart` keeps the service stopped until the database is actually in place (step 2) and
+   the vault has a master key again (step 3) — starting it any earlier just fails the startup check.
+2. **Restore the database backup** onto the target SQL Server (or attach it), pointed at by the same
+   `ConnectionStrings:MiniVault` the install step configured.
+3. **Recover the master key** using the recovery material saved when the vault was first initialized:
+
+   ```powershell
+   minivault.exe recover --new-master-key auto --share <share1> --share <share2>
+   # or, for single-key recovery mode:
+   minivault.exe recover --new-master-key auto --recovery-key <key>
+   ```
+
+   This stores a brand-new master key on the new host (DPAPI on Windows) and rewraps every data key
+   with it; secrets themselves are untouched.
+4. **Start the service** (`sc.exe start KarmasisMiniVault`, or start it normally if you did not pass
+   `-SkipServiceStart`) and apply the SQL grant script printed by `install.ps1` first, if you have not
+   already.
+5. **Verify** `https://<host>/v1/health` returns `{"status":"ok","initialized":true,...}`.
+
+### Container variant
+
+```bash
+docker run --rm \
+  -e ConnectionStrings__MiniVault="Server=...;Database=MiniVault;..." \
+  -e MasterKey__Provider=Environment \
+  karmasis/minivault:dev recover --new-master-key auto --share <share1> --share <share2>
+```
+
+Copy the printed master key into `docker/.env` as `MINIVAULT__MASTERKEY` (the `Environment` provider
+cannot store it itself), then start the `minivault` service normally.
 
 ## TLS
 
@@ -214,9 +446,41 @@ dotnet dev-certs https --trust
 
 `appsettings.Development.json` already sets `Tls:AllowDevelopmentCertificate: true`. For a real install, use a PFX (`Tls:Certificate:Path`/`Password`) or import the certificate into a machine store and reference it by `Tls:Certificate:Thumbprint`.
 
-Self-signed installs: clients that talk to a MiniVault server with a self-signed or otherwise untrusted certificate must pin the certificate's thumbprint (see `docs/client.md`, TLS pinning) rather than disabling validation.
+Self-signed installs: clients that talk to a MiniVault server with a self-signed or otherwise untrusted certificate must pin the certificate's thumbprint (see `docs/client.md`, section 11 "TLS") rather than disabling validation.
 
-Renewing a certificate: replace the PFX (or re-import into the store under the same or a new thumbprint), restart the MiniVault service, and — for self-signed installs — update the thumbprint pinned in every client's configuration.
+### PFX vs. store thumbprint
+
+| | `Tls:Certificate:Path`/`Password` (PFX) | `Tls:Certificate:Thumbprint` (store) |
+|---|---|---|
+| Where the private key lives | In the PFX file, loaded on every startup. | In the Windows certificate store (`LocalMachine\My` by default); nothing outside the store to protect. |
+| Rotation | Replace the file (and update the password if it changed). | Import the new certificate, point `Thumbprint` at it. |
+| Secret at rest | The PFX password sits in `appsettings.json` in plain text (ACL-protected, but still plaintext). | No file password to store. |
+| Portability | Easy to copy to a container or a second host. | Windows-only; the certificate has to be imported on each host that needs it. |
+| Recommended for | Docker/Linux (no certificate store), or when the same PFX is deployed to several hosts. | A dedicated Windows host with its own certificate lifecycle (e.g. imported by a CA enrollment tool). |
+
+Set exactly one of the two; `Tls:AllowDevelopmentCertificate` is the only way to configure neither, and it is Development-only (see below).
+
+### Renewal runbook
+
+1. Get the new certificate (from your CA, or a freshly generated self-signed one for internal use).
+2. Either replace the PFX at `Tls:Certificate:Path` (same filename, same or updated password) or
+   import the new certificate into the store and update `Tls:Certificate:Thumbprint` to match.
+3. Restart the MiniVault service — Kestrel loads the certificate once at startup; a running server
+   does not pick up a replaced file or a new thumbprint on its own.
+4. **For self-signed installs**, update `ServerCertificateThumbprint` in every client's configuration
+   to the new certificate's thumbprint (see `docs/client.md`, section 11). Pinned clients reject the
+   new certificate — correctly, since pinning replaces chain validation rather than adding to it —
+   until they are updated. A certificate from a trusted CA needs no client-side change.
+
+### Development certificate
+
+`Tls:AllowDevelopmentCertificate` is for local development only: it tells Kestrel to use `dotnet
+dev-certs https --trust`'s certificate instead of a configured one. `appsettings.Development.json`
+sets it to `true`, which is why it works out of the box in the Development environment. Startup
+rejects it everywhere else — `TlsStartupCheck` fails fast with "`Tls:AllowDevelopmentCertificate is
+only allowed in the Development environment...`" — unless `Tls:AllowDevelopmentCertificateOutsideDevelopment`
+is also `true`. That escape hatch exists for automated test hosts; never set it for a real deployment,
+since the ASP.NET Core development certificate is not a secret and is not tied to any specific host.
 
 ## HTTP API
 
@@ -290,3 +554,79 @@ curl -si http://localhost:5000/v1/secrets/test/one \
   -H "Authorization: Bearer $TOKEN" -H 'If-None-Match: "1"'
 # HTTP/1.1 304 Not Modified
 ```
+
+## Upgrading
+
+Migrations run automatically only inside `init`, which runs once. After upgrading the binaries,
+apply any pending schema changes yourself with `minivault migrate` before starting the new service.
+
+### Windows
+
+1. Stop the service: `sc.exe stop KarmasisMiniVault` (or let the MSI upgrade do this for you).
+2. Replace the files — either run the new MSI (an MSI upgrade replaces `APPDIR` and skips `init`, as
+   described above) or `robocopy` a fresh `dotnet publish` output over the install directory, as
+   `install.ps1` step 1 does.
+3. Run `minivault.exe migrate` from the install directory.
+4. Start the service: `sc.exe start KarmasisMiniVault`.
+
+### Docker
+
+```powershell
+docker pull karmasis/minivault:dev   # or rebuild with build-local.ps1 / CI
+
+docker run --rm --env-file docker/.env karmasis/minivault:dev migrate
+
+docker compose -f docker/docker-compose.yml up -d minivault   # picks up the new image
+```
+
+`MINIVAULT__MASTERKEY` and the certificate volume are unaffected by an image swap; `migrate` needs
+the same connection string and master key as the server, so pass the same `--env-file`.
+
+### Rotating the data key on upgrade
+
+If the upgrade is also a good time to rotate the active data key, run `minivault rotate-dek` — but
+remember it needs its own service restart afterwards (see "`minivault rotate-dek`" above): the
+running server loads data keys once at startup and does not see a new version until it restarts.
+
+## Troubleshooting
+
+### Startup refusals
+
+The service logs a single critical line and exits when any of these checks fails. TLS is checked
+before the vault, so a certificate problem is reported even when the vault itself is fine.
+
+| Message (abbreviated) | Cause | Fix |
+|---|---|---|
+| `The vault is not initialized. Run 'minivault init' first.` | No `VaultMetadata` row — `init` was never run against this database (or the connection string points at the wrong database). | Run `minivault init`, or check `ConnectionStrings:MiniVault` points at the right database. |
+| `Master key unavailable (Dpapi): Master key file not found: ...` | `masterkey.bin` is missing — wrong host, wrong `MasterKey:Path`, or the file was deleted. | Restore it via `minivault recover` with the recovery material (see "Backup and restore"), or fix `MasterKey:Path`. |
+| `Master key unavailable (Environment): Environment variable MINIVAULT__MASTERKEY is not set.` | The container/process does not have `MINIVAULT__MASTERKEY` set. | Set it from the value `init`/`recover` printed. |
+| `The master key does not unwrap the stored data keys. Wrong master key for this database, or the database belongs to another vault.` | The master key present does not match the one this database's data keys were wrapped with — typically a copied database pointed at a different host's key, or a restored master key that does not match. | Recover with the correct recovery material, or point the connection string at the right database. |
+| `Tls:AllowDevelopmentCertificate is only allowed in the Development environment...` | `Tls:AllowDevelopmentCertificate=true` outside `ASPNETCORE_ENVIRONMENT=Development`. | Configure a real `Tls:Certificate:Path`/`Thumbprint`; never set `Tls:AllowDevelopmentCertificateOutsideDevelopment` for a real deployment. |
+| `Could not load the TLS certificate from '<path>'. Check that the file exists and that Tls:Certificate:Password is correct.` | Bad PFX path or wrong password. | Fix `Tls:Certificate:Path`/`Password`. |
+| `No certificate with thumbprint '<thumb>' and a private key was found in <location>\<store>.` | The thumbprint is not installed in the configured store, or is installed without its private key. | Import the certificate (with its private key) into the configured store, or fix the thumbprint/`StoreLocation`. |
+| `Expected exactly one active data key, found <N>.` | Zero or more than one `DataKeys` row has `IsActive = 1` — normally impossible (the schema has a filtered unique index on it) unless the table was edited by hand. | Fix the `DataKeys` table so exactly one row is active; if this happens without manual edits, treat it as a bug and preserve the database for investigation. |
+
+### Health and 503s
+
+`GET /v1/health` never returns an error status — it always answers `200` with
+`{"status":"ok","initialized":<bool>,"activeDataKeyVersion":<n>}`. `initialized: false` (with
+`activeDataKeyVersion: 0`) means the vault has not been loaded yet — check the startup log for one of
+the refusals above; a `curl -f`-based health check (as the Docker `HEALTHCHECK` uses) will still count
+this as "healthy" since the HTTP status is 200, so also read the log for a real health signal.
+
+Every *other* endpoint returns `503 vault_unavailable` when the master key or the database is
+temporarily unreachable (a transient SQL error, a dropped connection, or a `MasterKeyUnavailableException`
+raised mid-request) — this is not a startup refusal, it can happen at any time the database or key
+provider hiccups, and normally self-resolves. Repeated `vault_unavailable` responses point at the
+database (connectivity, load) rather than at MiniVault's own logic.
+
+### Audit signals
+
+- **`token.rejected` spikes** (client id `(anonymous)`) mean something is sending malformed, missing,
+  or expired bearer tokens against protected endpoints — check the caller's IP and the recorded reason.
+  Watch it alongside failed `token` rows (bad client credentials at `/v1/auth/token`); together they
+  are what credential guessing and token replay look like from the audit trail.
+- **`429` on `POST /v1/auth/token`** means more than `Token:LoginRateLimitPerMinute` (default 30)
+  requests hit that endpoint in the current one-minute window, counted per server process. A
+  legitimate client hitting this needs a lower retry rate or a higher limit; an unexpected burst is
+  worth treating as a possible credential-guessing attempt, same as a `token.rejected`/failed-`token` spike.

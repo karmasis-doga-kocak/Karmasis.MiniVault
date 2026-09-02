@@ -34,7 +34,10 @@ declare `#Requires -Version 5.1`). It:
    prints the recovery material, and asks the operator to type `SAVED` before continuing — the recovery
    material is shown only once and is not stored anywhere after this step. The `--out` file used to display
    it is deleted once you confirm. Pass `-NonInteractive` to skip the prompt (a warning is printed instead)
-   for unattended installs; make sure the recovery output was captured some other way first.
+   for unattended installs; make sure the recovery output was captured some other way first. Pass `-SkipInit`
+   to skip this step entirely — files, config, ACLs and the service are still installed, but no vault is
+   created; use this when restoring an existing vault onto a new host (see `docs/operations.md`, "Backup and
+   restore") and run `minivault.exe recover` yourself afterwards.
 5. Prints the SQL grant script (see below), then registers the Windows service
    (`sc.exe create`/`description`/`failure`, restarting on failure) and starts it — unless
    `-SkipServiceStart` is passed, in which case the service is created but left stopped.
@@ -94,6 +97,7 @@ exits without touching the machine. It does **not** require an elevated shell, w
 | `-ServiceName` | `KarmasisMiniVault` | |
 | `-NonInteractive` | off | Skips the `SAVED` confirmation prompt (prints a warning instead). |
 | `-SkipServiceStart` | off | Creates the service but does not start it, so the SQL grant can be applied first. Start it later with `sc.exe start <ServiceName>`. |
+| `-SkipInit` | off | Skips step 4 (`minivault.exe init`) entirely. Use this to restore an existing vault onto a new host: run `minivault.exe recover` with the recovery material afterwards, instead of creating a brand-new vault. See `docs/operations.md`, "Backup and restore". |
 | `-WhatIfMode` | off | Preview only; does not require elevation. |
 
 ## 3. Uninstall

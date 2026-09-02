@@ -12,7 +12,7 @@ namespace MiniVault.Server.Cli;
 /// </summary>
 public static partial class CliApp
 {
-    private static readonly string[] CommandNames = ["init", "recover", "rotate-dek", "client", "role", "--help", "-h", "-?", "--version"];
+    private static readonly string[] CommandNames = ["init", "recover", "rotate-dek", "migrate", "client", "role", "--help", "-h", "-?", "--version"];
 
     [GeneratedRegex(@"^--[A-Za-z0-9_]+(:[A-Za-z0-9_]+)+$")]
     private static partial Regex ConfigurationOverrideTokenRegex();
@@ -51,6 +51,7 @@ public static partial class CliApp
         root.Subcommands.Add(InitCommand.Build(Services, output));
         root.Subcommands.Add(RecoverCommand.Build(Services, output));
         root.Subcommands.Add(RotateDekCommand.Build(Services, output));
+        root.Subcommands.Add(MigrateCommand.Build(Services, output));
         root.Subcommands.Add(ClientCommand.Build(Services, output));
         root.Subcommands.Add(RoleCommand.Build(Services, output));
         // Operators pass configuration overrides (--ConnectionStrings:MiniVault, --MasterKey:Provider, ...) on the same

@@ -39,10 +39,27 @@ public class CliAppTests : IAsyncLifetime
     [InlineData(new[] { "init" }, true)]
     [InlineData(new[] { "recover" }, true)]
     [InlineData(new[] { "rotate-dek" }, true)]
+    [InlineData(new[] { "migrate" }, true)]
     [InlineData(new[] { "--help" }, true)]
     [InlineData(new[] { "serve" }, false)]
     [InlineData(new string[0], false)]
     public void IsCliInvocation_DetectsCommands(string[] args, bool expected) => CliApp.IsCliInvocation(args).ShouldBe(expected);
+
+    [Fact]
+    public async Task Migrate_OnFreshDatabase_AppliesMigrations_ThenIsUpToDate_ThenInitStillWorks()
+    {
+        var (code, output) = await Run("migrate");
+        code.ShouldBe(0);
+        output.ShouldContain("Applied");
+
+        var (code2, output2) = await Run("migrate");
+        code2.ShouldBe(0);
+        output2.ShouldContain("Database is up to date.");
+
+        var (code3, output3) = await Run("init", "--recovery", "single");
+        code3.ShouldBe(0);
+        output3.ShouldContain("Recovery key");
+    }
 
     [Fact]
     public async Task Init_Shamir_PrintsShares_AndSecondInitFails()

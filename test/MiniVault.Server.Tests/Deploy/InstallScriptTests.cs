@@ -33,6 +33,27 @@ public class InstallScriptTests
     }
 
     [Fact]
+    public void SkipInit_ShowsStep4AsSkipped()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var sourceDir = Path.Combine(Path.GetTempPath(), "minivault-src-" + Guid.NewGuid());
+        var installDir = Path.Combine(Path.GetTempPath(), "minivault-install-" + Guid.NewGuid());
+
+        var result = RunScript(
+            "-WhatIfMode",
+            "-SkipInit",
+            "-ConnectionString", "Server=x;Database=y;Integrated Security=true",
+            "-CertificateThumbprint", "0123456789ABCDEF0123456789ABCDEF01234567",
+            "-SourceDir", sourceDir,
+            "-InstallDir", installDir);
+
+        result.ExitCode.ShouldBe(0, result.CombinedOutput);
+        result.CombinedOutput.ShouldContain("Step 4: Skipped");
+        result.CombinedOutput.ShouldContain("recover");
+    }
+
+    [Fact]
     public void MissingConnectionString_FailsWithNonZeroExit_AndMentionsConnectionString()
     {
         if (!OperatingSystem.IsWindows()) return;
