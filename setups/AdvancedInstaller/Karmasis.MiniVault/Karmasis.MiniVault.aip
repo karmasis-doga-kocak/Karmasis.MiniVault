@@ -37,10 +37,15 @@
     <ROW Property="ServiceName" Value="KarmasisMiniVault"/>
     <ROW Property="UpgradeCode" Value="{49C997F8-49AB-40B5-B736-4D4D59CA7762}"/>
     <!-- MV_* are the installer's public inputs. Every one of them is listed in
-         SecureCustomProperties so msiexec keeps it across the elevated/deferred boundary, and the
-         three secrets are listed in MsiHiddenProperties so they do not land in the MSI log. -->
+         SecureCustomProperties so msiexec keeps it across the elevated/deferred boundary. Every
+         secret is listed in MsiHiddenProperties - and so are the deferred actions' own names,
+         because a deferred action's CustomActionData is logged under a property with the same name
+         as the action, and that data carries the connection string, the certificate password and
+         the master-key password. Hiding only the MV_* properties would leave all three in a /l*v
+         log. -->
     <ROW Property="MV_CONNECTIONSTRING" Value=""/>
     <ROW Property="MV_SERVICEACCOUNT" Value="LocalSystem"/>
+    <ROW Property="MV_SERVICEACCOUNT_PASSWORD" Value=""/>
     <ROW Property="MV_RECOVERY" Value="single"/>
     <ROW Property="MV_SHARES" Value="3"/>
     <ROW Property="MV_THRESHOLD" Value="2"/>
@@ -49,10 +54,11 @@
     <ROW Property="MV_CERT_PASSWORD" Value=""/>
     <ROW Property="MV_CERT_THUMBPRINT" Value=""/>
     <ROW Property="MV_URL" Value="https://0.0.0.0:8200"/>
+    <ROW Property="MV_RECONFIGURE" Value=""/>
     <ROW Property="MV_SQL_OK" Value="0"/>
     <ROW Property="MV_SQL_ERROR" Value=""/>
-    <ROW Property="MsiHiddenProperties" Value="MV_CONNECTIONSTRING;MV_CERT_PASSWORD;MV_MASTERKEY"/>
-    <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND;MV_CONNECTIONSTRING;MV_SERVICEACCOUNT;MV_RECOVERY;MV_SHARES;MV_THRESHOLD;MV_MASTERKEY;MV_CERT_PATH;MV_CERT_PASSWORD;MV_CERT_THUMBPRINT;MV_URL;MV_SQL_OK;MV_SQL_ERROR"/>
+    <ROW Property="MsiHiddenProperties" Value="MV_CONNECTIONSTRING;MV_CERT_PASSWORD;MV_MASTERKEY;MV_SERVICEACCOUNT_PASSWORD;WriteMachineConfig;RunInit"/>
+    <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND;MV_CONNECTIONSTRING;MV_SERVICEACCOUNT;MV_SERVICEACCOUNT_PASSWORD;MV_RECOVERY;MV_SHARES;MV_THRESHOLD;MV_MASTERKEY;MV_CERT_PATH;MV_CERT_PASSWORD;MV_CERT_THUMBPRINT;MV_URL;MV_RECONFIGURE;MV_SQL_OK;MV_SQL_ERROR"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiDirsComponent">
     <ROW Directory="APPDIR" Directory_Parent="TARGETDIR" DefaultDir="APPDIR:." IsPseudoRoot="1"/>
@@ -64,23 +70,29 @@
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiCompsComponent">
     <ROW Component="AI_CustomARPName" ComponentId="{F3B949D5-5057-405D-B94A-754129DC672B}" Directory_="APPDIR" Attributes="260" KeyPath="DisplayName" Options="1"/>
-    <ROW Component="APPDIR" ComponentId="{765CBC34-C924-4D3B-8A21-9249376F04FE}" Directory_="APPDIR" Attributes="0"/>
-    <ROW Component="ProductInformation" ComponentId="{002B0E32-78B5-4B3F-AA0A-32A8E1388DEE}" Directory_="APPDIR" Attributes="4" KeyPath="Path"/>
-    <ROW Component="minivault.exe" ComponentId="{69D25E48-E926-4F70-BED3-E4A7A755C8FE}" Directory_="APPDIR" Attributes="0" KeyPath="minivault.exe"/>
+    <!-- Attributes carry 256 = msidbComponentAttributes64bit on every component: the package is x64
+         (BuildComponent MsiPackageType="x64"), so its components must be marked 64-bit or ICE80 fails
+         the validation and the registry rows would be redirected to the WOW6432Node hive. -->
+    <ROW Component="APPDIR" ComponentId="{765CBC34-C924-4D3B-8A21-9249376F04FE}" Directory_="APPDIR" Attributes="256"/>
+    <ROW Component="ProductInformation" ComponentId="{002B0E32-78B5-4B3F-AA0A-32A8E1388DEE}" Directory_="APPDIR" Attributes="260" KeyPath="Path"/>
+    <ROW Component="minivault.exe" ComponentId="{69D25E48-E926-4F70-BED3-E4A7A755C8FE}" Directory_="APPDIR" Attributes="256" KeyPath="minivault.exe"/>
     <!-- %ProgramData%\MiniVault: created by the MSI, permissions applied by LockPermissions and
          then re-applied by the WriteMachineConfig custom action (same grants as install.ps1).
          Attributes 16 = msidbComponentAttributesPermanent: an uninstall leaves the folder, and with
-         it appsettings.json and the DPAPI-protected master key, in place. -->
-    <ROW Component="MiniVaultData" ComponentId="{039355A6-1236-4CBD-A9E8-9CF539019A31}" Directory_="MiniVaultData_Dir" Attributes="16"/>
+         it appsettings.json and the DPAPI-protected master key, in place. 272 = 256 (64-bit) + 16. -->
+    <ROW Component="MiniVaultData" ComponentId="{039355A6-1236-4CBD-A9E8-9CF539019A31}" Directory_="MiniVaultData_Dir" Attributes="272"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatsComponent">
     <ROW Feature="MainFeature" Title="MainFeature" Description="Karmasis MiniVault server" Display="1" Level="1" Directory_="APPDIR" Attributes="0"/>
     <ATTRIBUTE name="CurrentFeature" value="MainFeature"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiFilesComponent">
-    <!-- Only the service executable is listed explicitly, because it is the KeyPath of the
-         component the ServiceInstall/ServiceControl rows hang off. Every other file in the publish
-         output is picked up by the SynchronizedFolderComponent at the end of this file. -->
+    <!-- minivault.exe is listed here, and excluded from the SynchronizedFolderComponent at the end of
+         this file, so that exactly one row owns it. It cannot simply be left to the synchronized
+         folder: ServiceInstall/ServiceControl/ServiceConfig all hang off a component whose KeyPath is
+         this file, and the components a synchronized folder creates at build time have generated
+         names that nothing here could reference. Every other file in the publish output does come
+         from the synchronized folder. -->
     <ROW File="minivault.exe" Component_="minivault.exe" FileName="minivault.exe" Attributes="0" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64\minivault.exe" SelfReg="false" DigSign="true"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatCompsComponent">
@@ -102,11 +114,17 @@
     <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" Domain="" User="S-1-5-32-544" Permission="268435456"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiServInstComponent">
-    <ROW ServiceInstall="minivault.exe" Name="[ServiceName]" DisplayName="[DisplayName]" ServiceType="16" StartType="2" ErrorControl="1" StartName="[MV_SERVICEACCOUNT]" Component_="minivault.exe" Description="Karmasis MiniVault secret vault server."/>
+    <!-- Password is empty for the built-in accounts (LocalSystem, NT AUTHORITY\NetworkService, ...) and
+         carries MV_SERVICEACCOUNT_PASSWORD for a domain or local user account. The property is hidden
+         from the MSI log; MSI itself never writes the ServiceInstall Password column to the log. -->
+    <ROW ServiceInstall="minivault.exe" Name="[ServiceName]" DisplayName="[DisplayName]" ServiceType="16" StartType="2" ErrorControl="1" StartName="[MV_SERVICEACCOUNT]" Password="[MV_SERVICEACCOUNT_PASSWORD]" Component_="minivault.exe" Description="Karmasis MiniVault secret vault server."/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiServCtrlComponent">
-    <!-- Event 160 = start on install (0x20) + stop on uninstall (0x80); Wait=1. -->
-    <ROW ServiceControl="minivault.exe" Name="[ServiceName]" Event="160" Wait="1" Component_="minivault.exe"/>
+    <!-- Event 163 = 0x01 start on install + 0x02 stop on install + 0x20 stop on uninstall +
+         0x80 delete on uninstall; Wait=1. The 0x01 bit is what actually starts the service at the end
+         of the installation - without it the MSI installed a service that never ran, and the 0x02 bit
+         is what stops the running service before an upgrade replaces its files. -->
+    <ROW ServiceControl="minivault.exe" Name="[ServiceName]" Event="163" Wait="1" Component_="minivault.exe"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiServConfigComponent">
     <ROW MsiServiceConfig="ServiceName" Name="[ServiceName]" Event="1" ConfigType="4" Argument="1" Component_="minivault.exe"/>
@@ -135,10 +153,11 @@
     <!-- Type 51 property setters. For a deferred action the property name must equal the action
          name; that is how MSI hands it its CustomActionData. The '|[&amp;fileid]|Type.Method' tail is
          what DotNetMethodCaller reads to find the assembly and the method to call. -->
-    <ROW Action="AI_DATA_SETTER" Type="51" Source="WriteMachineConfig" Target="MV_CONNECTIONSTRING=&quot;[MV_CONNECTIONSTRING]&quot;, MV_SERVICEACCOUNT=&quot;[MV_SERVICEACCOUNT]&quot;, MV_URL=&quot;[MV_URL]&quot;, MV_CERT_PATH=&quot;[MV_CERT_PATH]&quot;, MV_CERT_PASSWORD=&quot;[MV_CERT_PASSWORD]&quot;, MV_CERT_THUMBPRINT=&quot;[MV_CERT_THUMBPRINT]&quot;, MV_PROGRAMDATA=&quot;[CommonAppDataFolder]MiniVault&quot;, APPDIR=&quot;[APPDIR]&quot;;|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.WriteMachineConfig"/>
+    <ROW Action="AI_DATA_SETTER" Type="51" Source="WriteMachineConfig" Target="MV_CONNECTIONSTRING=&quot;[MV_CONNECTIONSTRING]&quot;, MV_SERVICEACCOUNT=&quot;[MV_SERVICEACCOUNT]&quot;, MV_URL=&quot;[MV_URL]&quot;, MV_CERT_PATH=&quot;[MV_CERT_PATH]&quot;, MV_CERT_PASSWORD=&quot;[MV_CERT_PASSWORD]&quot;, MV_CERT_THUMBPRINT=&quot;[MV_CERT_THUMBPRINT]&quot;, MV_RECONFIGURE=&quot;[MV_RECONFIGURE]&quot;, MV_PROGRAMDATA=&quot;[CommonAppDataFolder]MiniVault&quot;, APPDIR=&quot;[APPDIR]&quot;;|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.WriteMachineConfig"/>
     <ROW Action="AI_DATA_SETTER_1" Type="51" Source="RunInit" Target="MV_RECOVERY=&quot;[MV_RECOVERY]&quot;, MV_SHARES=&quot;[MV_SHARES]&quot;, MV_THRESHOLD=&quot;[MV_THRESHOLD]&quot;, MV_MASTERKEY=&quot;[MV_MASTERKEY]&quot;, MV_PROGRAMDATA=&quot;[CommonAppDataFolder]MiniVault&quot;, APPDIR=&quot;[APPDIR]&quot;;|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.RunInit"/>
     <ROW Action="AI_DATA_SETTER_2" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.TestSqlConnection"/>
     <ROW Action="AI_DATA_SETTER_3" Type="51" Source="AI_RemoveAllTempFiles" Target="[AI_TEMP_FILE_ROLLBACK_INFO]"/>
+    <ROW Action="AI_DATA_SETTER_4" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.ValidateProperties"/>
     <!-- Type 3073 = 1 (DLL in Binary table) + 1024 (deferred/InScript) + 2048 (NoImpersonate):
          runs in the elevated service context, between InstallFiles and InstallServices. -->
     <ROW Action="WriteMachineConfig" Type="3073" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER"/>
@@ -147,6 +166,11 @@
          Wire it to the SqlDlg "Test connection" button once that page exists; it sets MV_SQL_OK
          (1/0) and MV_SQL_ERROR and never fails the installation. -->
     <ROW Action="TestSqlConnection" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_2" WithoutSeq="true"/>
+    <!-- Type 1 = DLL in the Binary table, immediate, return value checked: returning Failure aborts the
+         installation. Sequenced right after LaunchConditions, so a value that cannot survive
+         CustomActionData (anything containing a double quote) is rejected before a single file is
+         copied. -->
+    <ROW Action="ValidateProperties" Type="1" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_4"/>
     <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>
     <ROW Action="AI_DoRemoveExternalUIStub" Type="3585" Source="ExternalUICleaner.dll" Target="DoRemoveExternalUIStub" WithoutSeq="true"/>
     <ROW Action="AI_DpiContentScale" Type="1" Source="aicustact.dll" Target="DpiContentScale"/>
@@ -170,6 +194,9 @@
     <ROW Action="AI_DOWNGRADE" Condition="AI_NEWERPRODUCTFOUND AND (UILevel &lt;&gt; 5)" Sequence="210"/>
     <ROW Action="AI_EnableDebugLog" Sequence="51"/>
     <ROW Action="AI_ResolveKnownFolders" Sequence="52"/>
+    <!-- LaunchConditions is 100; validate the operator's input immediately after it. -->
+    <ROW Action="AI_DATA_SETTER_4" Sequence="101"/>
+    <ROW Action="ValidateProperties" Sequence="102"/>
     <ROW Action="AI_RESTORE_LOCATION" Condition="APPDIR=&quot;&quot;" Sequence="749"/>
     <ROW Action="AI_ExtractTempFiles" Sequence="1001"/>
     <ROW Action="AI_PREPARE_UPGRADE" Condition="AI_UPGRADE=&quot;No&quot; AND (Not Installed)" Sequence="1397"/>
@@ -230,9 +257,10 @@
   <COMPONENT cid="caphyon.advinst.msicomp.SynchronizedFolderComponent">
     <!-- The whole self-contained publish output. Produce it before building the MSI with:
              dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64 -->
-    <ROW Directory_="APPDIR" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64" Feature="MainFeature" ExcludePattern="*~|#*#|%*%|._|CVS|.cvsignore|SCCS|vssver.scc|mssccprj.scc|vssver2.scc|.svn|.DS_Store|*.pdb" ExcludeFlags="6"/>
+    <ROW Directory_="APPDIR" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64" Feature="MainFeature" ExcludePattern="*~|#*#|%*%|._|CVS|.cvsignore|SCCS|vssver.scc|mssccprj.scc|vssver2.scc|.svn|.DS_Store|*.pdb|minivault.exe" ExcludeFlags="6"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiActionTextComponent">
+    <ROW Action="ValidateProperties" Description="Checking the MiniVault installer properties" Template="[1]"/>
     <ROW Action="WriteMachineConfig" Description="Writing the MiniVault machine configuration" Template="File: [1]"/>
     <ROW Action="RunInit" Description="Initializing the MiniVault database" Template="[1]"/>
     <ROW Action="AI_ConfigFailActions" Description="Configure service failure actions" DescriptionLocId="ActionText.Description.AI_ConfigFailActions" Template="Service: [1]" TemplateLocId="ActionText.Template.AI_ConfigFailActions"/>

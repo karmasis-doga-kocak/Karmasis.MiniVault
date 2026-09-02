@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
@@ -26,7 +26,10 @@ namespace Karmasis.MiniVault.CustomActions
     /// </summary>
     public interface IProcessRunner
     {
-        ProcessResult Run(string exePath, string[] arguments);
+        /// <param name="environment">Extra environment variables for the child process, or null. Used to hand a
+        /// secret to the child without putting it on a command line, where the process list, the MSI verbose log
+        /// and any command-line auditing would all pick it up.</param>
+        ProcessResult Run(string exePath, string[] arguments, IDictionary<string, string> environment);
     }
 
     /// <summary>
@@ -48,6 +51,11 @@ namespace Karmasis.MiniVault.CustomActions
 
         public ProcessResult Run(string exePath, string[] arguments)
         {
+            return Run(exePath, arguments, null);
+        }
+
+        public ProcessResult Run(string exePath, string[] arguments, IDictionary<string, string> environment)
+        {
             if (string.IsNullOrEmpty(exePath))
             {
                 throw new ArgumentException("exePath is required.", "exePath");
@@ -60,6 +68,14 @@ namespace Karmasis.MiniVault.CustomActions
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+
+            if (environment != null)
+            {
+                foreach (var entry in environment)
+                {
+                    startInfo.EnvironmentVariables[entry.Key] = entry.Value;
+                }
+            }
 
             var stdOut = new StringBuilder();
             var stdErr = new StringBuilder();
@@ -163,9 +179,28 @@ namespace Karmasis.MiniVault.CustomActions
     {
         public const string ExecutableName = "minivault.exe";
 
+        /// <summary>The variable 'minivault.exe init --master-key-from-env' reads the master-key password from.
+        /// The password is passed this way instead of as '--master-key &lt;password&gt;' because a deferred custom
+        /// action's command line is visible in the process list and is written to the MSI verbose log.</summary>
+        public const string MasterKeyEnvironmentVariable = "MINIVAULT_INIT_MASTER_KEY";
+
+        /// <summary>The environment the 'init' child process needs for <paramref name="masterKeyPassword"/>, or
+        /// null when no password was given (the CLI then generates a random master key).</summary>
+        public static IDictionary<string, string> BuildInitEnvironment(string masterKeyPassword)
+        {
+            if (string.IsNullOrEmpty(masterKeyPassword) || masterKeyPassword.Trim().Length == 0)
+            {
+                return null;
+            }
+
+            return new Dictionary<string, string> { { MasterKeyEnvironmentVariable, masterKeyPassword } };
+        }
+
         /// <summary>
         /// Builds the argument vector for 'minivault.exe init', matching Step 4 of
-        /// deploy/windows/install.ps1.
+        /// deploy/windows/install.ps1. A non-blank <paramref name="masterKeyPassword"/> adds
+        /// '--master-key-from-env'; the password itself travels in the environment built by
+        /// <see cref="BuildInitEnvironment"/>.
         /// </summary>
         public static string[] BuildInitArguments(string recovery, int shares, int threshold, string masterKeyPassword, string outFile)
         {
@@ -200,8 +235,8 @@ namespace Karmasis.MiniVault.CustomActions
 
             if (!string.IsNullOrEmpty(masterKeyPassword) && masterKeyPassword.Trim().Length > 0)
             {
-                arguments.Add("--master-key");
-                arguments.Add(masterKeyPassword);
+                // The password itself goes through the environment (BuildInitEnvironment), never here.
+                arguments.Add("--master-key-from-env");
             }
 
             return arguments.ToArray();

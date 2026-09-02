@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Static checks on Karmasis.MiniVault.aip. Does NOT build an MSI (that needs Advanced Installer).
@@ -12,6 +12,10 @@
        first, or pass -SkipPayload).
     4. The custom-actions assembly paths referenced from the .aip match the project's output path,
        and (unless -SkipPayload) the built DLL is there.
+    5. Every secret is hidden from the MSI log - the MV_* properties an operator types AND the
+       CustomActionData property of every deferred managed custom action, which carries copies of
+       them - the properties the custom actions read exist, and the service is actually started on
+       install.
 
     Exits 0 when everything checks out, 1 otherwise.
 
@@ -163,7 +167,8 @@ if ($managedActions.Count -eq 0) {
 $expectedMethods = @(
     'Karmasis.MiniVault.CustomActions.InstallActions.WriteMachineConfig',
     'Karmasis.MiniVault.CustomActions.InstallActions.RunInit',
-    'Karmasis.MiniVault.CustomActions.InstallActions.TestSqlConnection'
+    'Karmasis.MiniVault.CustomActions.InstallActions.TestSqlConnection',
+    'Karmasis.MiniVault.CustomActions.InstallActions.ValidateProperties'
 )
 $declaredMethods = @($managedActions.Values | ForEach-Object { $_.Method })
 foreach ($method in $expectedMethods) {
@@ -322,6 +327,73 @@ if (-not (Test-Path -LiteralPath $customActionsProject)) {
         Write-Ok 'Karmasis.AdvancedInstallerKit.dll is deployed alongside the custom actions'
     } else {
         Write-Fail 'no TempFileComponent row for Karmasis.AdvancedInstallerKit.dll'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 5. Secrets, properties and the service control event
+# ---------------------------------------------------------------------------
+Write-Section '5. Secrets, properties and the service control event'
+
+$properties = @{}
+foreach ($row in @($components['caphyon.advinst.msicomp.MsiPropsComponent'].ROW)) {
+    $value = if ($row.PSObject.Properties.Name -contains 'Value') { $row.Value } else { '' }
+    $properties[$row.Property] = $value
+}
+
+$hiddenProperties = @()
+if ($properties.ContainsKey('MsiHiddenProperties')) {
+    $hiddenProperties = @($properties['MsiHiddenProperties'] -split ';' |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+if ($hiddenProperties.Count -eq 0) {
+    Write-Fail 'MsiHiddenProperties is missing or empty: msiexec /l*v would log every secret'
+}
+
+# The secrets an operator types on the msiexec command line or into a dialog.
+foreach ($secret in @('MV_CONNECTIONSTRING', 'MV_CERT_PASSWORD', 'MV_MASTERKEY', 'MV_SERVICEACCOUNT_PASSWORD')) {
+    if (-not $properties.ContainsKey($secret)) {
+        Write-Fail "property not declared: $secret"
+    } elseif ($hiddenProperties -contains $secret) {
+        Write-Ok "hidden from the MSI log: $secret"
+    } else {
+        Write-Fail "$secret is not in MsiHiddenProperties, so msiexec /l*v would write it to the log"
+    }
+}
+
+# Properties the custom actions read but that carry no secret.
+foreach ($property in @('MV_RECONFIGURE', 'MV_SERVICEACCOUNT')) {
+    if ($properties.ContainsKey($property)) {
+        Write-Ok "property declared: $property"
+    } else {
+        Write-Fail "property not declared: $property"
+    }
+}
+
+# A deferred action reads its input from a property named after the action, and MSI logs that
+# property like any other. The setter copied the secrets into it, so the action name has to be
+# hidden too - hiding only the MV_* properties would leave full copies in the log.
+$deferredManagedActions = @($customActions |
+    Where-Object { $_.PSObject.Properties.Name -contains 'Source' -and $_.Source -eq 'DotNetMethodCaller.dll' -and ([int]$_.Type -band 0x400) } |
+    ForEach-Object { $_.Action })
+foreach ($setter in @($customActions | Where-Object { [int]$_.Type -eq 51 })) {
+    $target = $setter.Source
+    if ($deferredManagedActions -notcontains $target) { continue }
+    if ($hiddenProperties -contains $target) {
+        Write-Ok "deferred CustomActionData hidden from the MSI log: $target"
+    } else {
+        Write-Fail "'$target' holds the CustomActionData of deferred action '$target' but is not in MsiHiddenProperties"
+    }
+}
+
+# msidbServiceControlEventStart (0x1). Without it the MSI installs a service and never starts it,
+# so the machine is left with a registered-but-stopped MiniVault after a successful installation.
+foreach ($row in @($components['caphyon.advinst.msicomp.MsiServCtrlComponent'].ROW)) {
+    $eventBits = [int]$row.Event
+    if ($eventBits -band 0x1) {
+        Write-Ok "ServiceControl '$($row.ServiceControl)' Event=$eventBits starts the service on install (0x1)"
+    } else {
+        Write-Fail "ServiceControl '$($row.ServiceControl)' Event=$eventBits does not set the start-on-install bit (0x1)"
     }
 }
 

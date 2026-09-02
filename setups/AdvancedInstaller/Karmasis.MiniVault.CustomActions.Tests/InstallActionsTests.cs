@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.AccessControl;
@@ -96,6 +96,96 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             }
         }
 
+        /// <summary>An upgrade re-runs WriteMachineConfig with whatever properties msiexec was given - the
+        /// defaults, when it was started from Add/Remove Programs. The existing configuration must survive that.
+        /// </summary>
+        [Fact]
+        public void WriteMachineConfig_WhenAppSettingsAlreadyExists_KeepsItAndStillAppliesTheAcl()
+        {
+            using (var directory = new TempDirectory())
+            {
+                var configPath = directory.File("appsettings.json");
+                File.WriteAllText(configPath, "{ \"kept\": true }");
+
+                // Runs as the current account, because the kept file is read back through the protected ACL.
+                var session = new FakeMsiSession(string.Format(
+                    "MV_CONNECTIONSTRING=\"Server=sql01;Database=MiniVault;Integrated Security=true\", " +
+                    "MV_SERVICEACCOUNT=\"{0}\", MV_URL=\"https://0.0.0.0:8200\", MV_PROGRAMDATA=\"{1}\", " +
+                    "MV_CERT_THUMBPRINT=\"0123456789ABCDEF0123456789ABCDEF01234567\"",
+                    WindowsIdentity.GetCurrent().Name, directory.Path));
+
+                InstallActions.WriteMachineConfig(session).ShouldBe((int)ActionResult.Success);
+
+                File.ReadAllText(configPath).ShouldBe("{ \"kept\": true }");
+                session.HasMessage(InstallMessage.ERROR).ShouldBeFalse();
+                session.LastMessage(InstallMessage.INFO).ShouldContain("existing configuration kept");
+                new DirectoryInfo(directory.Path).GetAccessControl().AreAccessRulesProtected.ShouldBeTrue();
+            }
+        }
+
+        [Fact]
+        public void WriteMachineConfig_WithReconfigure_OverwritesAnExistingAppSettings()
+        {
+            using (var directory = new TempDirectory())
+            {
+                var configPath = directory.File("appsettings.json");
+                File.WriteAllText(configPath, "{ \"kept\": true }");
+
+                // Runs as the current account, because the rewritten file is read back below.
+                var session = new FakeMsiSession(string.Format(
+                    "MV_CONNECTIONSTRING=\"Server=sql01;Database=MiniVault;Integrated Security=true\", " +
+                    "MV_SERVICEACCOUNT=\"{0}\", MV_URL=\"https://0.0.0.0:8200\", MV_PROGRAMDATA=\"{1}\", " +
+                    "MV_CERT_THUMBPRINT=\"0123456789ABCDEF0123456789ABCDEF01234567\", MV_RECONFIGURE=\"1\"",
+                    WindowsIdentity.GetCurrent().Name, directory.Path));
+
+                InstallActions.WriteMachineConfig(session).ShouldBe((int)ActionResult.Success);
+
+                File.ReadAllText(configPath).ShouldContain("\"Url\": \"https://0.0.0.0:8200\"");
+                session.LastMessage(InstallMessage.INFO).ShouldContain("wrote ");
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // ValidateProperties
+        // -------------------------------------------------------------------
+
+        [Theory]
+        [InlineData("MV_CONNECTIONSTRING")]
+        [InlineData("MV_CERT_PASSWORD")]
+        [InlineData("MV_MASTERKEY")]
+        [InlineData("MV_SERVICEACCOUNT_PASSWORD")]
+        public void ValidateProperties_WithADoubleQuote_FailsAndNamesTheProperty(string property)
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(property, "va\"lue");
+
+            InstallActions.ValidateProperties(session).ShouldBe((int)ActionResult.Failure);
+
+            session.LastMessage(InstallMessage.ERROR).ShouldContain(property);
+        }
+
+        [Fact]
+        public void ValidateProperties_WithQuoteFreeValues_Succeeds()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty("MV_CONNECTIONSTRING", "Server=sql01;Database=MiniVault;Integrated Security=true");
+            session.SetProperty("MV_CERT_PASSWORD", "p@ss w0rd!");
+            session.SetProperty("MV_MASTERKEY", "another one");
+            session.SetProperty("MV_SERVICEACCOUNT_PASSWORD", "svc-p@ss");
+
+            InstallActions.ValidateProperties(session).ShouldBe((int)ActionResult.Success);
+
+            session.HasMessage(InstallMessage.ERROR).ShouldBeFalse();
+        }
+
+        [Fact]
+        public void ValidateProperties_WithNothingSet_Succeeds()
+        {
+            var session = new FakeMsiSession();
+
+            InstallActions.ValidateProperties(session).ShouldBe((int)ActionResult.Success);
+        }
+
         // -------------------------------------------------------------------
         // RunInit
         // -------------------------------------------------------------------
@@ -153,8 +243,10 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             }
         }
 
+        /// <summary>A deferred custom action's command line is visible in the process list and in the MSI verbose
+        /// log, so the master-key password goes to minivault.exe through the environment instead.</summary>
         [Fact]
-        public void RunInit_WithAMasterKeyPassword_PassesMasterKey()
+        public void RunInit_WithAMasterKeyPassword_PassesItThroughTheEnvironment_NotTheCommandLine()
         {
             using (var directory = new TempDirectory(create: false))
             {
@@ -164,8 +256,27 @@ namespace Karmasis.MiniVault.CustomActions.Tests
 
                 InstallActions.RunInit(session, runner).ShouldBe((int)ActionResult.Success);
 
-                var arguments = runner.LastArguments;
-                arguments[Array.IndexOf(arguments, "--master-key") + 1].ShouldBe("pa ss");
+                runner.LastArguments.ShouldContain("--master-key-from-env");
+                runner.LastArguments.ShouldNotContain("--master-key");
+                runner.LastArguments.ShouldNotContain("pa ss");
+                runner.LastEnvironment.ShouldNotBeNull();
+                runner.LastEnvironment[MiniVaultCli.MasterKeyEnvironmentVariable].ShouldBe("pa ss");
+            }
+        }
+
+        [Fact]
+        public void RunInit_WithoutAMasterKeyPassword_PassesNoExtraEnvironment()
+        {
+            using (var directory = new TempDirectory(create: false))
+            {
+                var session = new FakeMsiSession(CustomActionData(
+                    directory.Path, @"C:\MiniVault", ", MV_RECOVERY=\"single\""));
+                var runner = new FakeProcessRunner(0, "Recovery key: abc\n");
+
+                InstallActions.RunInit(session, runner).ShouldBe((int)ActionResult.Success);
+
+                runner.LastArguments.ShouldNotContain("--master-key-from-env");
+                runner.LastEnvironment.ShouldBeNull();
             }
         }
 

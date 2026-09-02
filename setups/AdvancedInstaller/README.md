@@ -92,6 +92,12 @@ succeeds offline with the repo's own `nuget.config`.
 
 1. Installs the publish output to `[ProgramFiles64Folder]Karmasis\MiniVault` (`APPDIR`), via a
    `SynchronizedFolderComponent` over `src/MiniVault.Server/bin/publish/win-x64`.
+   `minivault.exe` itself is **excluded** from that synchronized folder and listed as a static
+   `MsiFilesComponent` row instead, so exactly one row owns it. It cannot be left to the
+   synchronized folder: `ServiceInstall`, `ServiceControl` and `ServiceConfig` all hang off a
+   component whose `KeyPath` is that file, and the components a synchronized folder creates at build
+   time have generated names nothing in the project can reference. Every component is marked
+   `Attributes` 64-bit (`256`), because the package is `MsiPackageType="x64"`.
 2. Creates `%ProgramData%\MiniVault` (`MsiCreateFolderComponent`) and applies SYSTEM +
    Administrators full control to it (`MsiLockPermissionsComponent`). The component is marked
    permanent, so **an uninstall leaves the folder, `appsettings.json` and the DPAPI-protected
@@ -142,6 +148,7 @@ strings and passwords passed to the MSI.
 | --- | --- | --- |
 | `MV_CONNECTIONSTRING` | *(empty, required)* | `ConnectionStrings:MiniVault`. |
 | `MV_SERVICEACCOUNT` | `LocalSystem` | Account the service runs as; also the identity granted read access to `%ProgramData%\MiniVault`. |
+| `MV_SERVICEACCOUNT_PASSWORD` | *(empty)* | Password for `MV_SERVICEACCOUNT`, written straight into the `ServiceInstall` `Password` column. Leave empty for the built-in accounts (`LocalSystem`, `NT AUTHORITY\NetworkService`, ...). |
 | `MV_RECOVERY` | `single` | `single` or `shamir`. |
 | `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
 | `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
@@ -150,11 +157,19 @@ strings and passwords passed to the MSI.
 | `MV_CERT_PASSWORD` | *(empty)* | PFX password. Stored in plain text in `appsettings.json`. |
 | `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. Spaces and the certmgr left-to-right mark are stripped. |
 | `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
+| `MV_RECONFIGURE` | *(empty)* | `1` to overwrite an existing `%ProgramData%\MiniVault\appsettings.json`. Empty (the default) keeps it, so an upgrade never clobbers a working configuration. |
 | `MV_SQL_OK` / `MV_SQL_ERROR` | `0` / *(empty)* | Output of `TestSqlConnection`. |
 
-`MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD` and `MV_MASTERKEY` are listed in `MsiHiddenProperties`, so
-they are not written to the MSI log. All `MV_*` properties are in `SecureCustomProperties` so they
-survive into the deferred, elevated actions.
+`MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` and `MV_SERVICEACCOUNT_PASSWORD` are listed
+in `MsiHiddenProperties`, and so are `WriteMachineConfig` and `RunInit` — a deferred action reads its
+input from a property named after the action, and MSI logs that property like any other, so hiding
+only the `MV_*` properties would still leave full copies of every secret in a `/l*v` log. All `MV_*`
+properties are in `SecureCustomProperties` so they survive into the deferred, elevated actions.
+
+None of these values may contain a double quote. `CustomActionData` is a `NAME="value"` list, so a
+quote would truncate the value; the immediate `ValidateProperties` custom action (sequenced right
+after `LaunchConditions`) fails the installation with a message naming the offending property rather
+than letting a truncated connection string or password reach the deferred actions.
 
 ## Unattended install
 

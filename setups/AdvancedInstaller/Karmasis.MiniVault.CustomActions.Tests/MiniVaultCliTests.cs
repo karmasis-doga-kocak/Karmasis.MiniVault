@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Shouldly;
 using Xunit;
 
@@ -65,11 +65,35 @@ namespace Karmasis.MiniVault.CustomActions.Tests
                 .ShouldBe(new[] { "init", "--recovery", "shamir", "--out", OutFile, "--shares", "3", "--threshold", "2" });
         }
 
+        /// <summary>The password must never reach the command line: the argument vector only asks the CLI to read
+        /// the environment, and the password travels in the environment BuildInitEnvironment produces.</summary>
         [Fact]
-        public void BuildInitArguments_WithMasterKeyPassword_AddsMasterKeyLast()
+        public void BuildInitArguments_WithMasterKeyPassword_AsksTheCliToReadTheEnvironment()
         {
-            MiniVaultCli.BuildInitArguments("single", 0, 0, "pa ss", OutFile)
-                .ShouldBe(new[] { "init", "--recovery", "single", "--out", OutFile, "--master-key", "pa ss" });
+            var arguments = MiniVaultCli.BuildInitArguments("single", 0, 0, "pa ss", OutFile);
+
+            arguments.ShouldBe(new[] { "init", "--recovery", "single", "--out", OutFile, "--master-key-from-env" });
+            arguments.ShouldNotContain("--master-key");
+            arguments.ShouldNotContain("pa ss");
+        }
+
+        [Fact]
+        public void BuildInitEnvironment_CarriesThePasswordUnderTheAgreedVariableName()
+        {
+            var environment = MiniVaultCli.BuildInitEnvironment("pa ss");
+
+            environment.Count.ShouldBe(1);
+            environment[MiniVaultCli.MasterKeyEnvironmentVariable].ShouldBe("pa ss");
+            MiniVaultCli.MasterKeyEnvironmentVariable.ShouldBe("MINIVAULT_INIT_MASTER_KEY");
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void BuildInitEnvironment_WithoutAPassword_IsNull(string password)
+        {
+            MiniVaultCli.BuildInitEnvironment(password).ShouldBeNull();
         }
 
         [Theory]

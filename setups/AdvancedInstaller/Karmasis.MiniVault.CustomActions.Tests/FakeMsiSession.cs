@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Karmasis.AdvancedInstallerKit;
 
@@ -87,12 +87,15 @@ namespace Karmasis.MiniVault.CustomActions.Tests
 
         public string[] LastArguments { get; private set; }
 
+        public IDictionary<string, string> LastEnvironment { get; private set; }
+
         public int Invocations { get; private set; }
 
-        public ProcessResult Run(string exePath, string[] arguments)
+        public ProcessResult Run(string exePath, string[] arguments, IDictionary<string, string> environment)
         {
             LastExePath = exePath;
             LastArguments = arguments;
+            LastEnvironment = environment;
             Invocations++;
             return _result;
         }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
@@ -57,6 +57,11 @@ namespace Karmasis.MiniVault.CustomActions
         /// <summary>[CommonAppDataFolder]MiniVault - where appsettings.json and the DPAPI key live.</summary>
         [InstallArgument("MV_PROGRAMDATA")]
         public string ProgramDataDir { get; set; }
+
+        /// <summary>"1" to overwrite an existing %ProgramData%\MiniVault\appsettings.json. Empty (the default)
+        /// keeps whatever is already there, which is what makes an upgrade non-destructive.</summary>
+        [InstallArgument("MV_RECONFIGURE")]
+        public string Reconfigure { get; set; }
     }
 
     /// <summary>
@@ -91,6 +96,21 @@ namespace Karmasis.MiniVault.CustomActions
                 var model = session.MapCustomActionData<InstallModel>();
                 var programDataDir = ResolveProgramDataDir(model);
                 var configPath = Path.Combine(programDataDir, "appsettings.json");
+
+                // An upgrade re-runs this action with whatever MV_* properties msiexec was given - which, for an
+                // upgrade started from Add/Remove Programs, is the defaults. Overwriting a working configuration
+                // with those would take the server down, so an existing file is kept unless MV_RECONFIGURE=1.
+                // The ACL is still (re-)applied: it is idempotent, and it is what the installed service depends on.
+                if (File.Exists(configPath) && !IsReconfigureRequested(model))
+                {
+                    DirectoryAcl.Protect(programDataDir, model.ServiceAccount);
+                    session.SendMessage(
+                        string.Format(CultureInfo.InvariantCulture,
+                            "MiniVault: {0} already exists; existing configuration kept (pass MV_RECONFIGURE=1 to overwrite it). The ACL was re-applied ({1}).",
+                            configPath, string.Join(" ", DirectoryAcl.DescribeGrants(model.ServiceAccount))),
+                        InstallMessage.INFO);
+                    return (int)ActionResult.Success;
+                }
 
                 var config = new MachineConfig
                 {
@@ -163,7 +183,10 @@ namespace Karmasis.MiniVault.CustomActions
                 var arguments = MiniVaultCli.BuildInitArguments(
                     model.Recovery, model.Shares, model.Threshold, model.MasterKey, outFile);
 
-                var result = processRunner.Run(exePath, arguments);
+                // The master-key password goes to the child through the environment, never on its command line:
+                // a deferred custom action's command line reaches the process list and the MSI verbose log.
+                var result = processRunner.Run(
+                    exePath, arguments, MiniVaultCli.BuildInitEnvironment(model.MasterKey));
 
                 if (result.ExitCode != 0)
                 {
@@ -201,6 +224,60 @@ namespace Karmasis.MiniVault.CustomActions
             catch (Exception ex)
             {
                 session.SendMessage("MiniVault: 'minivault.exe init' failed: " + ex.Message, InstallMessage.ERROR);
+                return (int)ActionResult.Failure;
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // ValidateProperties (immediate)
+        // -------------------------------------------------------------------
+
+        /// <summary>The properties whose values travel to the deferred actions inside CustomActionData.</summary>
+        internal static readonly string[] QuoteSensitiveProperties =
+        {
+            "MV_CONNECTIONSTRING",
+            "MV_CERT_PASSWORD",
+            "MV_MASTERKEY",
+            "MV_SERVICEACCOUNT_PASSWORD"
+        };
+
+        /// <summary>
+        /// Fails the installation, with a message naming the property, when a value that has to survive
+        /// CustomActionData contains a double quote. CustomActionData is a
+        /// <c>NAME="value", NAME2="value2"</c> list, so an embedded <c>"</c> ends the value early and the deferred
+        /// action silently receives a truncated connection string or password. Immediate and sequenced right after
+        /// LaunchConditions, so this is caught before anything is installed.
+        /// </summary>
+        public static int ValidateProperties(string sessionHandle)
+        {
+            return ValidateProperties(new MsiSession(sessionHandle));
+        }
+
+        internal static int ValidateProperties(IMsiSession session)
+        {
+            try
+            {
+                foreach (var property in QuoteSensitiveProperties)
+                {
+                    var value = session.GetProperty(property);
+                    if (!string.IsNullOrEmpty(value) && value.IndexOf('"') >= 0)
+                    {
+                        session.SendMessage(
+                            string.Format(CultureInfo.InvariantCulture,
+                                "MiniVault: {0} must not contain a double quote (\"). The installer passes it to its "
+                                + "deferred actions as NAME=\"value\", so a quote would truncate the value. Choose a "
+                                + "value without quotes.",
+                                property),
+                            InstallMessage.ERROR);
+                        return (int)ActionResult.Failure;
+                    }
+                }
+
+                return (int)ActionResult.Success;
+            }
+            catch (Exception ex)
+            {
+                session.SendMessage("MiniVault: property validation failed: " + ex.Message, InstallMessage.ERROR);
                 return (int)ActionResult.Failure;
             }
         }
@@ -310,6 +387,12 @@ namespace Karmasis.MiniVault.CustomActions
         private static bool ContainsAlreadyInitialized(string text)
         {
             return text != null && text.IndexOf("already initialized", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>True when MV_RECONFIGURE asks for an existing appsettings.json to be overwritten.</summary>
+        internal static bool IsReconfigureRequested(InstallModel model)
+        {
+            return model != null && !string.IsNullOrEmpty(model.Reconfigure) && model.Reconfigure.Trim() == "1";
         }
 
         private static string NullIfBlank(string value)

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MiniVault.Server.Cli;
 using MiniVault.Server.Keys;
@@ -89,6 +89,45 @@ public class CliAppTests : IAsyncLifetime
             Lines(output, "Recovery key").Count.ShouldBe(1);
         }
         finally { File.Delete(file); }
+    }
+
+    /// <summary>The MSI and install.ps1 hand the master-key password to 'init' through the environment so it never
+    /// appears on a command line. The derived KEK must be identical to the one --master-key would have produced,
+    /// and the variable must be gone from the process once it has been read.</summary>
+    [Fact]
+    public async Task Init_WithMasterKeyFromEnv_DerivesKek()
+    {
+        const string password = "P@ssw0rd from the environment";
+        Environment.SetEnvironmentVariable(InitCommand.MasterKeyEnvironmentVariable, password);
+        try
+        {
+            var (code, output) = await Run("init", "--recovery", "single", "--master-key-from-env");
+
+            code.ShouldBe(0, output);
+            Environment.GetEnvironmentVariable(InitCommand.MasterKeyEnvironmentVariable).ShouldBeNull();
+
+            await using var ctx = _db.CreateContext();
+            var metadata = await ctx.VaultMetadata.SingleAsync();
+            metadata.KekSalt.ShouldNotBeNull();
+            metadata.KekIterations.ShouldNotBeNull();
+            MasterKeyMaterial.FromPassword(password, metadata.KekSalt!, metadata.KekIterations!.Value).Kek
+                .ShouldBe(_provider.GetKek());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(InitCommand.MasterKeyEnvironmentVariable, null);
+        }
+    }
+
+    [Fact]
+    public async Task Init_WithMasterKeyFromEnv_WhenTheVariableIsNotSet_IsAnError()
+    {
+        Environment.SetEnvironmentVariable(InitCommand.MasterKeyEnvironmentVariable, null);
+
+        var (code, output) = await Run("init", "--recovery", "single", "--master-key-from-env");
+
+        code.ShouldBe(1);
+        output.ShouldContain(InitCommand.MasterKeyEnvironmentVariable);
     }
 
     [Fact]
