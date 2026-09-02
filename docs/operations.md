@@ -75,22 +75,11 @@ Restart the MiniVault service after rotating; the running server loads data keys
 
 Starts the server. It refuses to start when the vault is not initialized or the master key does not unwrap the data keys; the reason is written to the log.
 
-## Master key providers
-
-| `MasterKey:Provider` | Where the key lives | Notes |
-|---|---|---|
-| `Dpapi` (default) | `%ProgramData%\MiniVault\masterkey.bin`, DPAPI LocalMachine | Windows only. Bound to the machine: the file cannot be read on another host. `MasterKey:Path` overrides the location. |
-| `Environment` | `MINIVAULT__MASTERKEY` (base64, 32 bytes) | Containers / Linux. `init` prints the value once. |
-
-## Backups
-
-Back up two things separately: the database (normal SQL Server backup) and the recovery material. Neither is useful alone.
-
 ## Clients and roles
 
 Services that call MiniVault authenticate as **clients**. A client has an id, a secret, and zero or more **roles**.
 
-A role is just a name plus a list of rules. Each rule is a scope prefix and a permission (`read`, or `write` which includes `read`). A client can read or write a secret if any of its roles has a rule whose scope is a prefix of the secret's name. A role with no rules grants nothing.
+A role is just a name plus a list of rules. Each rule is a scope prefix and a permission (`read`, or `write` which includes `read`). A client can read or write a secret if any of its roles has a rule whose scope is a prefix of the secret's name. A role with no rules grants nothing. End scopes with `/` — `dataskope` would also match `dataskope-other/...` because matching is by prefix.
 
 ### `minivault role add <name> [--description "..."]`
 
@@ -175,3 +164,66 @@ The last command prints the client's secret once. Copy it into the consuming ser
 ### Audit trail
 
 Every command above writes an audit row with client id `cli`. The action names are `client.add`, `client.remove`, `client.assign`, `role.add`, `role.remove`, `role.grant`.
+
+## Master key providers
+
+| `MasterKey:Provider` | Where the key lives | Notes |
+|---|---|---|
+| `Dpapi` (default) | `%ProgramData%\MiniVault\masterkey.bin`, DPAPI LocalMachine | Windows only. Bound to the machine: the file cannot be read on another host. `MasterKey:Path` overrides the location. |
+| `Environment` | `MINIVAULT__MASTERKEY` (base64, 32 bytes) | Containers / Linux. `init` prints the value once. |
+
+## Backups
+
+Back up two things separately: the database (normal SQL Server backup) and the recovery material. Neither is useful alone.
+
+## HTTP API
+
+TLS/HTTPS configuration ships with the installer and container images (a later release); today the server listens on plain HTTP and is expected to sit behind a host that terminates TLS, or to be used only on a trusted local network, until that lands.
+
+| Method | Path | Auth | Success | Error codes |
+|---|---|---|---|---|
+| `POST` | `/v1/auth/token` | none | 200 | `invalid_request`, `unauthorized` |
+| `GET` | `/v1/secrets/{name}` | Bearer | 200 (304 if `If-None-Match` matches) | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
+| `PUT` | `/v1/secrets/{name}` | Bearer | 200 | `invalid_request`, `unauthorized`, `forbidden`, `conflict` |
+| `DELETE` | `/v1/secrets/{name}` | Bearer | 204 | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
+| `GET` | `/v1/secrets?prefix=` | Bearer | 200 | `unauthorized`, `forbidden` |
+| `GET` | `/v1/health` | none | 200 | — |
+
+Any endpoint can also return `vault_unavailable` (503, the master key or database is temporarily unreachable) or `internal_error` (500, unexpected failure); both are logged server-side.
+
+### Error codes
+
+| `error` | Meaning |
+|---|---|
+| `unauthorized` | Missing, invalid, or expired bearer token; or bad credentials at `/v1/auth/token`. |
+| `forbidden` | The token's roles have no rule whose scope is a prefix of the requested secret name (or the requested permission is read-only where write is required). |
+| `not_found` | No secret exists at that name. |
+| `invalid_request` | Malformed input: bad secret name, missing/non-base64 `value`, missing token fields, oversized value or content type. |
+| `conflict` | The secret was modified concurrently (optimistic concurrency); retry the request. |
+| `vault_unavailable` | The vault is temporarily unavailable (master key or database unreachable). |
+| `internal_error` | Unexpected server failure. |
+
+### Example: token, write, read with ETag, conditional read
+
+```
+curl -s -X POST http://localhost:5000/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"c","clientSecret":"<client secret>"}'
+# {"accessToken":"eyJ...","expiresIn":900}
+
+TOKEN=eyJ...
+
+curl -s -X PUT http://localhost:5000/v1/secrets/test/one \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"value":"aGVsbG8=","contentType":"text/plain"}'
+# {"version":1}
+
+curl -si http://localhost:5000/v1/secrets/test/one -H "Authorization: Bearer $TOKEN"
+# HTTP/1.1 200 OK
+# ETag: "1"
+# {"name":"test/one","value":"aGVsbG8=","contentType":"text/plain","version":1,"updatedAt":"..."}
+
+curl -si http://localhost:5000/v1/secrets/test/one \
+  -H "Authorization: Bearer $TOKEN" -H 'If-None-Match: "1"'
+# HTTP/1.1 304 Not Modified
+```
