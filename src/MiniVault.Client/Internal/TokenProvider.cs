@@ -9,7 +9,7 @@ namespace MiniVault.Client.Internal;
 /// automatically shortly before it expires. Concurrent callers observing an expired (or absent) token share a
 /// single in-flight login via a semaphore; a failed login leaves no cached token behind.
 /// </summary>
-internal sealed class TokenProvider
+internal sealed class TokenProvider : IDisposable
 {
     /// <summary>Refresh this many seconds before the token's actual expiry, unless the lifetime is too short for that margin.</summary>
     private const int RefreshMarginSeconds = 60;
@@ -65,6 +65,9 @@ internal sealed class TokenProvider
     }
 
     public void Invalidate() => _cached = null;
+
+    /// <summary>Releases the semaphore that serializes concurrent logins.</summary>
+    public void Dispose() => _gate.Dispose();
 
     private sealed class CachedToken
     {
