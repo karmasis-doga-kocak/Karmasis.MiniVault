@@ -26,33 +26,33 @@ public sealed class VaultRecovery(MiniVaultDbContext db, IMasterKeyProvider prov
 
         try
         {
-            foreach (var key in keys)
+            try
             {
-                var dek = KeyHierarchy.UnwrapWithRecovery(key, recoveryKey);
-                KeyHierarchy.RewrapWithMaster(key, dek, master.Kek);
-                Array.Clear(dek);
+                foreach (var key in keys)
+                {
+                    var dek = KeyHierarchy.UnwrapWithRecovery(key, recoveryKey);
+                    KeyHierarchy.RewrapWithMaster(key, dek, master.Kek);
+                    Array.Clear(dek);
+                }
+                meta.RecoveryKeyWrappedByMaster = KeyWrapper.Wrap(recoveryKey, master.Kek);
             }
-            meta.RecoveryKeyWrappedByMaster = KeyWrapper.Wrap(recoveryKey, master.Kek);
-        }
-        catch (CryptographicException ex)
-        {
-            throw new VaultException("The recovery key does not unwrap the stored data keys. Wrong recovery key or shares.", ex);
-        }
-        finally
-        {
-            Array.Clear(recoveryKey);
-        }
+            catch (CryptographicException ex)
+            {
+                throw new VaultException("The recovery key does not unwrap the stored data keys. Wrong recovery key or shares.", ex);
+            }
+            finally
+            {
+                Array.Clear(recoveryKey);
+            }
 
-        meta.KekSalt = master.Salt;
-        meta.KekIterations = master.Iterations;
-        db.AuditLogs.Add(new AuditLog { Timestamp = clock.GetUtcNow(), ClientId = VaultInitializer.AuditClientId, Action = "recover", Success = true, Detail = $"rewrapped={keys.Count}" });
+            meta.KekSalt = master.Salt;
+            meta.KekIterations = master.Iterations;
+            db.AuditLogs.Add(new AuditLog { Timestamp = clock.GetUtcNow(), ClientId = VaultInitializer.AuditClientId, Action = "recover", Success = true, Detail = $"rewrapped={keys.Count}" });
 
-        // The database is rewrapped under the new KEK first, then the KEK is stored. If storing fails, the operator
-        // receives the new KEK in the error so the vault is never left rewrapped under a key nobody holds; the
-        // recovery material stays valid either way because WrappedByRecovery is untouched.
-        var kekBase64 = Convert.ToBase64String(master.Kek);
-        try
-        {
+            // The database is rewrapped under the new KEK first, then the KEK is stored. If storing fails, the operator
+            // receives the new KEK in the error so the vault is never left rewrapped under a key nobody holds; the
+            // recovery material stays valid either way because WrappedByRecovery is untouched.
+            var kekBase64 = Convert.ToBase64String(master.Kek);
             await db.SaveChangesAsync(ct);
             if (!provider.CanStore)
                 return new RecoverResult(false, kekBase64, keys.Count);
@@ -61,7 +61,7 @@ public sealed class VaultRecovery(MiniVaultDbContext db, IMasterKeyProvider prov
             {
                 provider.Store(master.Kek);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 throw new VaultException(
                     $"Data keys were rewrapped but the new master key could not be stored ({ex.Message}). " +

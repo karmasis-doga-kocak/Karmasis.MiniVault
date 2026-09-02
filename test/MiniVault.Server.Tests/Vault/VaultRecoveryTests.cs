@@ -107,7 +107,7 @@ public class VaultRecoveryTests : IAsyncLifetime
     public async Task Recover_WhenStoreFails_ThrowsWithNewKeyInMessage_AndDbIsRewrapped()
     {
         await using var ctx = _db.CreateContext();
-        var sut = new VaultRecovery(ctx, new ThrowingStoreProvider(), TimeProvider.System);
+        var sut = new VaultRecovery(ctx, new ThrowingStoreProvider(new IOException("disk full")), TimeProvider.System);
 
         var ex = await Should.ThrowAsync<VaultException>(() => sut.RecoverAsync(new RecoverOptions([_init.Recovery.Parts[0], _init.Recovery.Parts[1]], null), CancellationToken.None));
 
@@ -120,12 +120,52 @@ public class VaultRecoveryTests : IAsyncLifetime
         KeyHierarchy.UnwrapWithMaster(key, newKek).ShouldBe(KeyHierarchy.UnwrapWithRecovery(key, _init.Recovery.Key));
     }
 
-    private sealed class ThrowingStoreProvider : IMasterKeyProvider
+    [Fact]
+    public async Task Recover_WhenStoreThrowsCryptographicException_StillSurfacesNewKey()
+    {
+        await using var ctx = _db.CreateContext();
+        var sut = new VaultRecovery(ctx, new ThrowingStoreProvider(new CryptographicException("dpapi failed")), TimeProvider.System);
+
+        var ex = await Should.ThrowAsync<VaultException>(() => sut.RecoverAsync(new RecoverOptions([_init.Recovery.Parts[0], _init.Recovery.Parts[1]], null), CancellationToken.None));
+
+        ex.InnerException.ShouldBeOfType<CryptographicException>();
+        Convert.FromBase64String(ex.Message[(ex.Message.LastIndexOf(':') + 1)..].Trim()).Length.ShouldBe(32);
+    }
+
+    [Fact]
+    public async Task Recover_WithWrongShares_ClearsCandidateMasterKey()
+    {
+        // Observable proxy for "master.Kek is cleared on the failure path": a provider that records what Store received
+        // is never called, and the DB stays wrapped under the original KEK.
+        var other = RecoveryMaterial.Generate(RecoveryMode.Shamir, 3, 2);
+        var recording = new RecordingStoreProvider();
+        await using var ctx = _db.CreateContext();
+
+        await Should.ThrowAsync<VaultException>(() => new VaultRecovery(ctx, recording, TimeProvider.System)
+            .RecoverAsync(new RecoverOptions([other.Parts[0], other.Parts[1]], null), CancellationToken.None));
+
+        recording.StoreCalls.ShouldBe(0);
+        await using var check = _db.CreateContext();
+        var key = await check.DataKeys.SingleAsync();
+        KeyHierarchy.UnwrapWithMaster(key, _provider.GetKek()).ShouldBe(KeyHierarchy.UnwrapWithRecovery(key, _init.Recovery.Key));
+    }
+
+    private sealed class ThrowingStoreProvider(Exception toThrow) : IMasterKeyProvider
     {
         public string Name => "ThrowingStore";
         public bool CanStore => true;
         public bool Exists() => false;
         public byte[] GetKek() => throw new MasterKeyUnavailableException("none");
-        public void Store(byte[] kek) => throw new IOException("disk full");
+        public void Store(byte[] kek) => throw toThrow;
+    }
+
+    private sealed class RecordingStoreProvider : IMasterKeyProvider
+    {
+        public int StoreCalls { get; private set; }
+        public string Name => "Recording";
+        public bool CanStore => true;
+        public bool Exists() => false;
+        public byte[] GetKek() => throw new MasterKeyUnavailableException("none");
+        public void Store(byte[] kek) => StoreCalls++;
     }
 }
