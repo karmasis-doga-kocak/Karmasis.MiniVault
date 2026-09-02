@@ -25,7 +25,7 @@ properties (`MV_*`):
 |---|---|---|
 | `MV_CONNECTIONSTRING` | *(empty, required)* | `ConnectionStrings:MiniVault`. |
 | `MV_SERVICEACCOUNT` | `LocalSystem` | Account the service runs as; also the identity granted read access to `%ProgramData%\MiniVault`. |
-| `MV_SERVICEACCOUNT_PASSWORD` | *(empty)* | Password for `MV_SERVICEACCOUNT`. Leave empty for the built-in accounts (`LocalSystem`, `NT AUTHORITY\NetworkService`, `NT AUTHORITY\LocalService`). |
+| `MV_SERVICEACCOUNT_PASSWORD` | *(empty)* | Password for `MV_SERVICEACCOUNT`. Leave empty for the built-in accounts (`LocalSystem`, `NT AUTHORITY\NetworkService`, `NT AUTHORITY\LocalService`). The MSI does **not** grant `SeServiceLogonRight` ("Log on as a service") to a non-built-in account — a domain or local service account must already have it **before** the install (grant it in `secpol.msc`, or run `deploy/windows/install.ps1` once, which grants it), otherwise `sc.exe`/the service-install custom action fails and the MSI rolls back with error 1920 (wrapping SCM error 1069, "The service did not start due to a logon failure"). |
 | `MV_RECOVERY` | `single` | `single` or `shamir`. |
 | `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
 | `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
@@ -39,7 +39,16 @@ properties (`MV_*`):
 None of `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` or `MV_SERVICEACCOUNT_PASSWORD` may
 contain a double quote (`"`). The installer hands them to its deferred actions as a
 `NAME="value"` list, where a quote would silently truncate the value; an immediate `ValidateProperties`
-action rejects it up front, naming the property, before anything is installed.
+action rejects it up front, naming the property, before anything is installed. If a value inside
+`MV_CONNECTIONSTRING` itself needs to contain `;` or `=` (for example inside `Application Name=...`),
+use single quotes inside the connection string instead of double quotes — SqlClient accepts
+single-quoted values in a connection string, and a single quote survives the `NAME="value"` list.
+`install.ps1` is less strict here: it rejects a double quote only in `-MasterKeyPassword`,
+`-CertificatePassword` and `-ServiceAccountPassword` (see below) — `-ConnectionString` may contain one,
+because it is written straight into `appsettings.json`, where a double quote is just another JSON
+character, not a delimiter. The MSI has no such exception: it rejects a double quote in all four
+properties (`MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY`, `MV_SERVICEACCOUNT_PASSWORD`)
+alike, because all four travel through the same `NAME="value"` list.
 
 **Interactive install**: today the MSI runs through the standard Advanced Installer dialogs only —
 the custom pages that would expose `MV_*` as form fields (connection string, master key, TLS,

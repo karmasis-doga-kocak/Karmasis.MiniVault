@@ -33,7 +33,10 @@ declare `#Requires -Version 5.1`). It:
    `masterkey.bin`.
 4. Runs `minivault.exe init` (via `Start-Process` with both streams captured, so a failure reports stderr;
    `-MasterKeyPassword` is passed through the `MINIVAULT_INIT_MASTER_KEY` environment variable with
-   `--master-key-from-env`, never on the child's command line),
+   `--master-key-from-env`, never on the child's command line - though because Windows PowerShell 5.1's
+   `Start-Process` has no per-process environment, the script sets that variable on its own process for
+   the duration of the call, so it is briefly visible to anything that can read the installing shell's
+   process environment, before being removed again; still a smaller exposure than the command line),
    prints the recovery material, and asks the operator to type `SAVED` before continuing — the recovery
    material is shown only once and is not stored anywhere after this step. The `--out` file used to display
    it is deleted once you confirm. Pass `-NonInteractive` to skip the prompt (a warning is printed instead)

@@ -147,7 +147,8 @@ own `DotNetMethodCaller.dll`:
 `MapCustomActionData<T>()` from the kit parses `NAME="value", NAME2="value2"`; the values **must** be
 double-quoted, and a value containing a `"` will not round-trip. That is enforced rather than left to
 the operator: the immediate `ValidateProperties` custom action (sequenced right after
-`LaunchConditions`, so nothing has been installed yet) fails the installation with a message naming the
+`AI_ExtractTempFiles` - which is what extracts this action's own DLL - and before `InstallInitialize`,
+so nothing has been installed yet) fails the installation with a message naming the
 property when `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` or `MV_SERVICEACCOUNT_PASSWORD`
 contains one.
 
@@ -163,7 +164,7 @@ written to the MSI verbose log.
 | --- | --- | --- |
 | `MV_CONNECTIONSTRING` | *(empty, required)* | `ConnectionStrings:MiniVault`. |
 | `MV_SERVICEACCOUNT` | `LocalSystem` | Account the service runs as; also the identity granted read access to `%ProgramData%\MiniVault`. |
-| `MV_SERVICEACCOUNT_PASSWORD` | *(empty)* | Password for `MV_SERVICEACCOUNT`, written straight into the `ServiceInstall` `Password` column. Leave empty for the built-in accounts (`LocalSystem`, `NT AUTHORITY\NetworkService`, ...). |
+| `MV_SERVICEACCOUNT_PASSWORD` | *(empty)* | Password for `MV_SERVICEACCOUNT`, written straight into the `ServiceInstall` `Password` column. Leave empty for the built-in accounts (`LocalSystem`, `NT AUTHORITY\NetworkService`, ...). The MSI does **not** grant `SeServiceLogonRight` ("Log on as a service") to a non-built-in account — a domain or local service account must already have it **before** the install (grant it in `secpol.msc`, or run `deploy/windows/install.ps1` once, which grants it), otherwise the service-install custom action fails and the MSI rolls back with error 1920 (wrapping SCM error 1069, "The service did not start due to a logon failure"). |
 | `MV_RECOVERY` | `single` | `single` or `shamir`. |
 | `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
 | `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
@@ -183,8 +184,11 @@ properties are in `SecureCustomProperties` so they survive into the deferred, el
 
 None of these values may contain a double quote. `CustomActionData` is a `NAME="value"` list, so a
 quote would truncate the value; the immediate `ValidateProperties` custom action (sequenced right
-after `LaunchConditions`) fails the installation with a message naming the offending property rather
-than letting a truncated connection string or password reach the deferred actions.
+after `AI_ExtractTempFiles` and before `InstallInitialize`) fails the installation with a message
+naming the offending property rather than letting a truncated connection string or password reach the
+deferred actions. If a connection-string value needs `;` or `=` inside it, use single quotes there
+instead of double quotes — SqlClient accepts single-quoted values in a connection string, and they
+survive the `NAME="value"` list untouched.
 
 ## Unattended install
 
