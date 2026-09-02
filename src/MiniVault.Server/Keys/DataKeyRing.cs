@@ -1,27 +1,63 @@
+using System.Security.Cryptography;
+using System.Text;
+using Karmasis.Cryptography.Keys;
 using Microsoft.EntityFrameworkCore;
 using MiniVault.Server.Data;
 using MiniVault.Server.Vault;
 
 namespace MiniVault.Server.Keys;
 
-/// <summary>Unwrapped DEKs for the running server, loaded once at startup with the KEK from the provider.
-/// GetDek returns a copy; callers may clear it after use.</summary>
+/// <summary>
+/// Unwrapped DEKs for the running server. Loaded at startup; reloaded once when a caller asks for a version
+/// that is not in memory (another process ran rotate-dek). Readers see an immutable snapshot; GetDek returns copies.
+/// Also derives the JWT signing key from the KEK (HKDF) so no separate signing secret exists.
+/// </summary>
 public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider provider)
 {
-    private readonly Dictionary<int, byte[]> _deks = new();
-    private int _activeVersion;
+    private sealed record Snapshot(IReadOnlyDictionary<int, byte[]> Deks, int ActiveVersion, byte[] JwtKey);
 
-    public bool IsLoaded { get; private set; }
-    public int ActiveVersion => IsLoaded ? _activeVersion : throw new VaultNotInitializedException();
+    private static readonly byte[] JwtSalt = Encoding.UTF8.GetBytes("jwt");
+    private readonly SemaphoreSlim _reload = new(1, 1);
+    private volatile Snapshot? _snapshot;
+
+    public bool IsLoaded => _snapshot is not null;
+    public int ActiveVersion => Current().ActiveVersion;
     public byte[] ActiveDek => GetDek(ActiveVersion);
+    public byte[] JwtSigningKey => (byte[])Current().JwtKey.Clone();
 
     public byte[] GetDek(int version)
     {
-        if (!IsLoaded) throw new VaultNotInitializedException();
-        return _deks.TryGetValue(version, out var dek) ? (byte[])dek.Clone() : throw new KeyNotFoundException($"No data key with version {version}.");
+        var snap = Current();
+        return snap.Deks.TryGetValue(version, out var dek) ? (byte[])dek.Clone() : throw new KeyNotFoundException($"No data key with version {version}.");
     }
 
-    public async Task LoadAsync(CancellationToken ct)
+    /// <summary>Returns the DEK for a version, reloading from the database once if it is unknown.</summary>
+    public async Task<byte[]> GetDekAsync(int version, CancellationToken ct)
+    {
+        var snap = Current();
+        if (snap.Deks.TryGetValue(version, out var dek)) return (byte[])dek.Clone();
+        await ReloadAsync(ct);
+        return GetDek(version);
+    }
+
+    public Task LoadAsync(CancellationToken ct) => ReloadAsync(ct);
+
+    public async Task ReloadAsync(CancellationToken ct)
+    {
+        await _reload.WaitAsync(ct);
+        try
+        {
+            _snapshot = await BuildSnapshotAsync(ct);
+        }
+        finally
+        {
+            _reload.Release();
+        }
+    }
+
+    private Snapshot Current() => _snapshot ?? throw new VaultNotInitializedException();
+
+    private async Task<Snapshot> BuildSnapshotAsync(CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MiniVaultDbContext>();
@@ -29,31 +65,28 @@ public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider 
         if (!await db.VaultMetadata.AnyAsync(ct)) throw new VaultNotInitializedException();
         var keys = await db.DataKeys.AsNoTracking().ToListAsync(ct);
         var activeKeys = keys.Where(k => k.IsActive).ToList();
-        if (activeKeys.Count != 1)
-            throw new VaultException($"Expected exactly one active data key, found {activeKeys.Count}.");
-        var active = activeKeys[0];
+        if (activeKeys.Count != 1) throw new VaultException($"Expected exactly one active data key, found {activeKeys.Count}.");
 
         byte[] kek;
         try { kek = provider.GetKek(); }
         catch (MasterKeyUnavailableException ex) { throw new VaultException($"Master key unavailable ({provider.Name}): {ex.Message}", ex); }
 
+        var deks = new Dictionary<int, byte[]>();
         try
         {
-            _deks.Clear();
             foreach (var key in keys)
-                _deks[key.Version] = KeyHierarchy.UnwrapWithMaster(key, kek);
+                deks[key.Version] = KeyHierarchy.UnwrapWithMaster(key, kek);
+            var jwtKey = KeyDerivation.Hkdf(kek, JwtSalt, "minivault-jwt", 32);
+            return new Snapshot(deks, activeKeys[0].Version, jwtKey);
         }
-        catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or ArgumentException)
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException)
         {
-            _deks.Clear();
+            foreach (var d in deks.Values) Array.Clear(d);
             throw new VaultException("The master key does not unwrap the stored data keys. Wrong master key for this database, or the database belongs to another vault.", ex);
         }
         finally
         {
             Array.Clear(kek);
         }
-
-        _activeVersion = active.Version;
-        IsLoaded = true;
     }
 }

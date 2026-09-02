@@ -79,4 +79,43 @@ public class DataKeyRingTests : IAsyncLifetime
 
         await Should.ThrowAsync<VaultException>(() => ring.LoadAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task GetDekAsync_ReloadsOnMiss_AfterRotation()
+    {
+        var provider = new InMemoryMasterKeyProvider();
+        await using (var ctx = _db.CreateContext())
+            await new VaultInitializer(ctx, provider, TimeProvider.System).InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None);
+        await using var sp = BuildServices(provider);
+        var ring = sp.GetRequiredService<DataKeyRing>();
+        await ring.LoadAsync(CancellationToken.None);
+        await using (var ctx = _db.CreateContext())
+            await new VaultRecovery(ctx, provider, TimeProvider.System).RotateDekAsync(CancellationToken.None);
+
+        var dek2 = await ring.GetDekAsync(2, CancellationToken.None);
+
+        dek2.Length.ShouldBe(32);
+        ring.ActiveVersion.ShouldBe(2);
+        await Should.ThrowAsync<KeyNotFoundException>(() => ring.GetDekAsync(99, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task JwtSigningKey_IsStableAcrossReloads_AndIsACopy()
+    {
+        var provider = new InMemoryMasterKeyProvider();
+        await using (var ctx = _db.CreateContext())
+            await new VaultInitializer(ctx, provider, TimeProvider.System).InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None);
+        await using var sp = BuildServices(provider);
+        var ring = sp.GetRequiredService<DataKeyRing>();
+        await ring.LoadAsync(CancellationToken.None);
+
+        var k1 = ring.JwtSigningKey;
+        Array.Clear(k1);
+        await ring.ReloadAsync(CancellationToken.None);
+        var k2 = ring.JwtSigningKey;
+
+        k2.Length.ShouldBe(32);
+        k2.ShouldNotBe(new byte[32]);
+        ring.JwtSigningKey.ShouldBe(k2);
+    }
 }
