@@ -88,4 +88,34 @@ public class DpapiMasterKeyProviderTests : IDisposable
         rules.ShouldContain(r => ((System.Security.Principal.SecurityIdentifier)r.IdentityReference).IsWellKnown(System.Security.Principal.WellKnownSidType.LocalSystemSid));
         provider.GetKek().Length.ShouldBe(32);   // current user can still read it back
     }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Store_DoesNotReAclPreExistingForeignDirectoryNamedMiniVault()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var foreign = Path.Combine(_dir, "MiniVault");
+        Directory.CreateDirectory(foreign);
+        var before = new DirectoryInfo(foreign).GetAccessControl();
+        var protectedBefore = before.AreAccessRulesProtected;
+        var provider = new DpapiMasterKeyProvider(Path.Combine(foreign, "masterkey.bin"));
+
+        provider.Store(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
+
+        new DirectoryInfo(foreign).GetAccessControl().AreAccessRulesProtected.ShouldBe(protectedBefore);
+        new FileInfo(Path.Combine(foreign, "masterkey.bin")).GetAccessControl().AreAccessRulesProtected.ShouldBeTrue(); // the file itself is still protected
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Store_ProtectsDirectoryItCreates()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var created = Path.Combine(_dir, "fresh", "keys");
+        var provider = new DpapiMasterKeyProvider(Path.Combine(created, "masterkey.bin"));
+
+        provider.Store(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
+
+        new DirectoryInfo(created).GetAccessControl().AreAccessRulesProtected.ShouldBeTrue();
+    }
 }

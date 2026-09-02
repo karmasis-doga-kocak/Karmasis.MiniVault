@@ -53,7 +53,10 @@ public sealed class DpapiMasterKeyProvider : IMasterKeyProvider
         var directoryExisted = dirInfo.Exists;
         if (!directoryExisted) dirInfo.Create();
         dirInfo.Refresh();
-        if (!directoryExisted || string.Equals(dirInfo.Name, MiniVaultConfiguration.ProductFolderName, StringComparison.OrdinalIgnoreCase))
+        // Only reset the ACL for a directory we created ourselves, or for the well-known machine
+        // config directory. A pre-existing directory the caller pointed MasterKey:Path at (even one
+        // that happens to be named "MiniVault") must keep whatever ACL it already had.
+        if (ShouldProtectDirectory(dirInfo, created: !directoryExisted))
             dirInfo.SetAccessControl(WindowsFileAcl.CreateOwnerOnlyDirectory());
 
         var protectedBytes = ProtectedData.Protect(kek, Entropy, DataProtectionScope.LocalMachine);
@@ -70,5 +73,13 @@ public sealed class DpapiMasterKeyProvider : IMasterKeyProvider
             Array.Clear(protectedBytes);
             if (File.Exists(temp)) File.Delete(temp);
         }
+    }
+
+    private static bool ShouldProtectDirectory(DirectoryInfo dir, bool created)
+    {
+        if (created) return true;
+        var actual = Path.GetFullPath(dir.FullName).TrimEnd(Path.DirectorySeparatorChar);
+        var machineConfig = Path.GetFullPath(MiniVaultConfiguration.MachineConfigDirectory).TrimEnd(Path.DirectorySeparatorChar);
+        return string.Equals(actual, machineConfig, StringComparison.OrdinalIgnoreCase);
     }
 }
