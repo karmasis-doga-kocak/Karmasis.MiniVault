@@ -46,3 +46,41 @@ var secret = await client.GetSecretAsync("dataskope/collector/connection-string"
 
     dotnet build
     dotnet test
+
+## CI
+
+`azure-pipelines.yml` runs on `dev` and `master` (no PR builds) on the `azure-self-hosted`
+pool, following the same conventions as `Karmasis.Cryptography`'s pipeline:
+
+1. **buildAndTest** — computes `image_version` from the `devops-vg` variable group
+   (`vgMAJOR.vgMINOR.vgPATCH`, patch bumped by one), restores with `nuget-dev.config`
+   (dev/feature branches) or `nuget-release.config` (master), builds, runs
+   `dotnet test --collect:"XPlat Code Coverage"` and publishes the coverage via
+   `PublishCodeCoverageResults@2`, then publishes the server
+   (`dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64`) as the
+   `minivault-win-x64` build artifact.
+2. **packAndPublish** — packs *only* the three client packages
+   (`MiniVault.Contracts`, `MiniVault.Client`, `MiniVault.Client.DependencyInjection`) with
+   `versioningScheme: byEnvVar` / `image_version`, and pushes them to the internal feed
+   (`artifactrepo` on master, `artifactrepodev` otherwise). On master it then bumps
+   `vgPATCH`/`vgRC` in the variable group via `az pipelines variable-group variable update`.
+   The server itself is not packed as a NuGet package.
+3. **docker** (optional, gated on the `buildDocker` variable, default `false`) — builds and
+   pushes the Docker image (`docker build -f docker/Dockerfile --build-arg
+   NUGET_CONFIG=nuget-dev.config ...`). **Not yet usable as-is**: the Dockerfile's
+   in-container `dotnet restore` needs credentials for the private feeds
+   (`NUGET_AUTH_TOKEN` or `VSS_NUGET_EXTERNAL_FEED_ENDPOINTS`), which the pipeline does not
+   yet provide — see the `TODO (DevOps team)` block in the `docker` stage.
+4. **msi** (optional, gated on the `buildMsi` variable, default `false`) — builds the
+   custom actions with MSBuild (`Karmasis.MiniVault.CustomActions` is a classic csproj;
+   `dotnet build` cannot build it — see `setups/AdvancedInstaller/README.md`) and then the
+   MSI itself via the `AdvancedInstaller@2` task. **Requires an agent with Advanced
+   Installer installed** — it has never actually been built in this environment.
+
+**Feed prerequisite:** `Karmasis.MiniVault.Client` currently depends on the prerelease
+`Karmasis.Cryptography 26.3.0-dek.1`, published only to the developer-local folder feed
+(`..\..\local-nuget`, used by the root `nuget.config`). `nuget-dev.config` and
+`nuget-release.config` do not include that feed, so **CI restore of this branch will fail**
+until `Karmasis.Cryptography` (ideally a stable release with a `netstandard2.0` target) is
+pushed to the `artifactrepo`/`artifactrepodev` feeds. See `docs/client.md`, "Release
+prerequisites".

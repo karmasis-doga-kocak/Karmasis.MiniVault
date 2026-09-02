@@ -1,0 +1,325 @@
+# Azure Pipelines definition for Karmasis.MiniVault.
+#
+# Mirrors the conventions in Karmasis.Cryptography's azure-pipelines.yml: trigger dev/master,
+# no PR builds, azure-self-hosted pool, an "image_version" computed from the devops-vg
+# vgMAJOR.vgMINOR.vgPATCH variables, a NuGet config chosen by branch, VSTest replaced here by
+# `dotnet test` (this repo's server/tests target net10.0, so DotNetCoreCLI@2 test with
+# --collect:"XPlat Code Coverage" is used instead of VSTest@2), and the same
+# push-to-internal-feed-by-branch / variable-group-update-on-master pattern.
+#
+# This pipeline assumes a devops-vg variable group scoped to this project/pipeline (same
+# pattern as Karmasis.Cryptography) supplying at least: vgMAJOR, vgMINOR, vgPATCH, vgRC,
+# project, groupId, solution (= Karmasis.MiniVault.sln), BuildConfiguration (= Release),
+# BuildPlatform, dockerRegistry, and (for the docker stage) registry credentials.
+#
+# *** IMPORTANT - restore will currently FAIL on this branch ***
+# Karmasis.MiniVault.Client (and therefore MiniVault.Client.DependencyInjection and the
+# solution-wide restore/build/test below) depends on Karmasis.Cryptography 26.3.0-dek.1, a
+# prerelease that today is published ONLY to the developer-local folder feed
+# (..\..\local-nuget - see the root nuget.config and docs/client.md, "Release
+# prerequisites"). nuget-dev.config and nuget-release.config (used by this pipeline) do NOT
+# include that local feed - it is a path outside the repo that does not exist on a build
+# agent - so `dotnet restore` here will fail with NU1101 until Karmasis.Cryptography (ideally
+# a stable release with a netstandard2.0 target) is pushed to the artifactrepo/artifactrepodev
+# feeds those files reference. The custom actions project also depends on
+# Karmasis.AdvancedInstallerKit 25.1.2, which lives on artifactrepodev only - see
+# setups/AdvancedInstaller/README.md.
+
+trigger:
+  branches:
+    include:
+      - dev
+      - master
+
+pr: none
+
+pool:
+  name: azure-self-hosted
+
+variables:
+- group: devops-vg
+# Both default to false: turn them on (via a pipeline run override, or by editing the
+# variable group) once an agent with Docker / Advanced Installer is available - see the
+# "docker" and "msi" stages below.
+- name: buildDocker
+  value: false
+- name: buildMsi
+  value: false
+
+stages:
+# ---------------------------------------------------------------------------------------
+# Stage 1: restore, build, test (with coverage), and publish the win-x64 server payload.
+# ---------------------------------------------------------------------------------------
+- stage: buildAndTest
+  displayName: buildAndTest
+  jobs:
+  - job: buildAndTest
+    steps:
+    - task: PowerShell@2
+      name: setVersion
+      displayName: 'Set image_version'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $vgMAJOR = $(vgMAJOR)
+          $vgMINOR = $(vgMINOR)
+          $vgPATCH = $(vgPATCH)
+
+          # Patch değerini 1 artır
+          $vgPATCH = [int]$vgPATCH + 1
+          Write-Host "vgPATCH: $vgPATCH"
+
+          # Image version oluşturma
+          $image_version = "$vgMAJOR.$vgMINOR.$vgPATCH"
+          Write-Host "image_version: $image_version"
+
+          # Gelecek adımlar için değişkeni ayarla (bu job içinde ve diğer job'lara
+          # aktarılabilmesi için output değişkeni olarak)
+          Write-Host "##vso[task.setvariable variable=image_version]$image_version"
+          Write-Host "##vso[task.setvariable variable=image_version;isOutput=true]$image_version"
+
+    - script: |
+        echo "image_version: $(image_version)"
+      displayName: 'Display image version'
+
+    - task: DotNetCoreCLI@2
+      condition: ne(variables['Build.SourceBranch'], 'refs/heads/master')
+      displayName: 'Restore (dev/feature - nuget-dev.config)'
+      inputs:
+        command: 'restore'
+        projects: '$(solution)'
+        feedsToUse: 'config'
+        nugetConfigPath: 'nuget-dev.config'
+        externalFeedCredentials: 'artifactrepo-nuget-feed, artifactrepodev-nuget-feed'
+
+    - task: DotNetCoreCLI@2
+      condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+      displayName: 'Restore (master - nuget-release.config)'
+      inputs:
+        command: 'restore'
+        projects: '$(solution)'
+        feedsToUse: 'config'
+        nugetConfigPath: 'nuget-release.config'
+        externalFeedCredentials: 'artifactrepo-nuget-feed'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Build solution'
+      inputs:
+        command: 'build'
+        projects: '$(solution)'
+        arguments: '--configuration $(BuildConfiguration) --no-restore'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Run tests'
+      inputs:
+        command: 'test'
+        projects: '$(solution)'
+        arguments: '--configuration $(BuildConfiguration) --no-build --collect:"XPlat Code Coverage" --logger trx --results-directory $(Agent.TempDirectory)'
+
+    - task: PublishCodeCoverageResults@2
+      displayName: 'Publish code coverage results'
+      inputs:
+        codeCoverageTool: 'Cobertura'
+        summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish server (win-x64)'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: 'src/MiniVault.Server/MiniVault.Server.csproj'
+        arguments: '-p:PublishProfile=win-x64 --configuration $(BuildConfiguration)'
+        zipAfterPublish: false
+        modifyOutputPath: false
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish minivault-win-x64 artifact'
+      inputs:
+        PathtoPublish: 'src/MiniVault.Server/bin/publish/win-x64'
+        ArtifactName: 'minivault-win-x64'
+
+# ---------------------------------------------------------------------------------------
+# Stage 2: pack and push ONLY the three client packages (Contracts, Client,
+# Client.DependencyInjection). The server is not a NuGet package - it is published as the
+# minivault-win-x64 build artifact above, and (optionally) as the Docker image / MSI below.
+# ---------------------------------------------------------------------------------------
+- stage: packAndPublish
+  displayName: packAndPublish
+  dependsOn: buildAndTest
+  condition: succeeded()
+  variables:
+    image_version: $[ stageDependencies.buildAndTest.buildAndTest.outputs['setVersion.image_version'] ]
+  jobs:
+  - job: packAndPublish
+    steps:
+    - script: |
+        echo "image_version: $(image_version)"
+      displayName: 'Display image version'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Pack client NuGet packages'
+      inputs:
+        command: 'pack'
+        packagesToPack: 'src/MiniVault.Contracts/MiniVault.Contracts.csproj;src/MiniVault.Client/MiniVault.Client.csproj;src/MiniVault.Client.DependencyInjection/MiniVault.Client.DependencyInjection.csproj'
+        versioningScheme: 'byEnvVar'
+        versionEnvVar: 'image_version'
+        outputDir: '$(build.artifactStagingDirectory)'
+
+    - task: DotNetCoreCLI@2
+      condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+      displayName: 'nuget push on master'
+      inputs:
+        command: 'push'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+        nuGetFeedType: 'internal'
+        publishVstsFeed: '62cbae5a-fb27-43bf-b847-5fe1c90ea2f1'
+
+    - task: DotNetCoreCLI@2
+      condition: ne(variables['Build.SourceBranch'], 'refs/heads/master')
+      displayName: 'nuget push on dev/feature'
+      inputs:
+        command: 'push'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+        nuGetFeedType: 'internal'
+        publishVstsFeed: 'ba5dde00-464f-4da1-917c-2ef9735c7f6c'
+
+    - task: PowerShell@2
+      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+      displayName: 'Update Variables on master branch'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $vgPATCH = $(vgPATCH)
+          $vgPATCH = [int]$vgPATCH + 1
+          Write-Host "vgPATCH: $vgPATCH"
+
+          $vgRC = $(vgRC)
+          $vgRC = [int]$vgRC + 1
+          Write-Host "vgRC: $vgRC"
+
+          az pipelines variable-group variable update --org "https://dev.azure.com/karmasisdm/" --project $(project) --group-id $(groupId) --name "vgRC" --value $vgRC --output yaml
+          az pipelines variable-group variable update --org "https://dev.azure.com/karmasisdm/" --project $(project) --group-id $(groupId) --name "vgPATCH" --value $vgPATCH --output yaml
+
+# ---------------------------------------------------------------------------------------
+# Stage 3 (optional, off by default): build and push the Docker image. Turn on by setting
+# the buildDocker variable to 'true' (pipeline run override or in the variable group).
+# ---------------------------------------------------------------------------------------
+- stage: docker
+  displayName: docker
+  dependsOn: buildAndTest
+  condition: and(succeeded(), eq(variables['buildDocker'], 'true'))
+  variables:
+    image_version: $[ stageDependencies.buildAndTest.buildAndTest.outputs['setVersion.image_version'] ]
+  jobs:
+  - job: buildAndPushImage
+    steps:
+    - script: |
+        echo "image_version: $(image_version)"
+      displayName: 'Display image version'
+
+    # -----------------------------------------------------------------------------------
+    # TODO (DevOps team) - before turning buildDocker on:
+    #
+    # docker/Dockerfile's build stage runs `dotnet restore` INSIDE the container against
+    # --build-arg NUGET_CONFIG (nuget-dev.config here), which lists the private
+    # artifactrepo/artifactrepodev feeds. A container build has no access to the agent's own
+    # NuGet credential provider, so that restore will fail with 401s unless one of the
+    # following is provided and wired up:
+    #
+    #   1. NUGET_AUTH_TOKEN as a pipeline (secret) variable, passed into the build as a
+    #      BuildKit secret (`--secret id=nuget_auth_token,env=NUGET_AUTH_TOKEN`, which
+    #      requires `DOCKER_BUILDKIT=1`) and consumed by an updated Dockerfile that mounts the
+    #      secret and either exports it as NUGET_AUTH_TOKEN for the NuGet Credential Provider
+    #      or writes it into a per-feed <packageSourceCredentials> block; or
+    #   2. VSS_NUGET_EXTERNAL_FEED_ENDPOINTS, produced by an `NuGetAuthenticate@1` step on the
+    #      agent (see below) and forwarded into the build as a --build-arg (it is a JSON blob
+    #      of feed/token pairs, not itself a secret value, so a plain --build-arg is fine),
+    #      with the Microsoft NuGet credential provider (`CredentialProvider.Microsoft`)
+    #      ADDed into the build stage so the in-container `dotnet restore` picks it up.
+    #
+    # Neither exists in this pipeline yet - the steps below assume option 2 but WILL FAIL
+    # until the Dockerfile is updated to actually use VSS_NUGET_EXTERNAL_FEED_ENDPOINTS during
+    # its `dotnet restore` step, and until dockerRegistry / registry credentials are added to
+    # the devops-vg variable group.
+    # -----------------------------------------------------------------------------------
+    - task: NuGetAuthenticate@1
+      displayName: 'Authenticate to the Karmasis NuGet feeds'
+
+    - script: |
+        docker build -f docker/Dockerfile --build-arg NUGET_CONFIG=nuget-dev.config -t $(dockerRegistry)/karmasis/minivault:$(image_version) .
+      displayName: 'docker build'
+      env:
+        VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: $(VSS_NUGET_EXTERNAL_FEED_ENDPOINTS)
+
+    - script: |
+        echo "$(dockerRegistryPassword)" | docker login $(dockerRegistry) --username $(dockerRegistryUser) --password-stdin
+        docker push $(dockerRegistry)/karmasis/minivault:$(image_version)
+      displayName: 'docker push'
+
+# ---------------------------------------------------------------------------------------
+# Stage 4 (optional, off by default): build the custom actions and the MSI. Turn on by
+# setting the buildMsi variable to 'true'. Requires an agent with Visual Studio / VS Build
+# Tools (for MSBuild) AND a licensed Advanced Installer install (AdvancedInstaller.com on
+# PATH, or the "Advanced Installer Tool Installer" / AdvancedInstaller@2 marketplace
+# extension) - see setups/AdvancedInstaller/README.md.
+# ---------------------------------------------------------------------------------------
+- stage: msi
+  displayName: msi
+  dependsOn: buildAndTest
+  condition: and(succeeded(), eq(variables['buildMsi'], 'true'))
+  jobs:
+  - job: buildMsi
+    steps:
+    - task: DownloadBuildArtifacts@1
+      displayName: 'Download minivault-win-x64'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'minivault-win-x64'
+        downloadPath: '$(Build.SourcesDirectory)/src/MiniVault.Server/bin/publish'
+
+    # DownloadBuildArtifacts@1 recreates the artifact name as a subfolder; the .aip's
+    # SynchronizedFolderComponent expects the payload directly under .../publish/win-x64.
+    - task: PowerShell@2
+      displayName: 'Move published payload into place'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $downloaded = Join-Path "$(Build.SourcesDirectory)\src\MiniVault.Server\bin\publish" "minivault-win-x64"
+          $target = Join-Path "$(Build.SourcesDirectory)\src\MiniVault.Server\bin\publish" "win-x64"
+          if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+          Move-Item $downloaded $target
+
+    # NOTE (build agent requirement): Karmasis.AdvancedInstallerKit (referenced by the custom
+    # actions csproj) lives on artifactrepodev only, and this classic csproj must be built
+    # with MSBuild - `dotnet build` fails with CS0246 (see the csproj header comment and
+    # setups/AdvancedInstaller/README.md, "Building the custom actions").
+    - task: MSBuild@1
+      displayName: 'Restore custom actions (MSBuild, nuget-dev.config)'
+      inputs:
+        solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
+        msbuildArguments: '/t:Restore /p:RestoreConfigFile=nuget-dev.config'
+
+    - task: MSBuild@1
+      displayName: 'Build custom actions (MSBuild, Release)'
+      inputs:
+        solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
+        configuration: 'Release'
+        msbuildArguments: '/t:Build'
+
+    # NOTE (agent requirement): this task needs a licensed Advanced Installer install on the
+    # agent - AdvancedInstaller.com on PATH (installed by the "Advanced Installer Tool
+    # Installer" marketplace task, run once earlier in this job) or already present on the
+    # image. It has never actually been run against Karmasis.MiniVault.aip in this
+    # environment - see setups/AdvancedInstaller/README.md, "Status: authored, not built".
+    - task: AdvancedInstaller@2
+      displayName: 'Build Karmasis.MiniVault.msi'
+      inputs:
+        ProjectPath: 'setups/AdvancedInstaller/Karmasis.MiniVault/Karmasis.MiniVault.aip'
+        BuildName: 'DefaultBuild'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish minivault-msi artifact'
+      inputs:
+        PathtoPublish: 'setups/AdvancedInstaller/Karmasis.MiniVault/Setup Files'
+        ArtifactName: 'minivault-msi'
