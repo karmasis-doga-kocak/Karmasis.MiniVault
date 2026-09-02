@@ -102,7 +102,11 @@ succeeds offline with the repo's own `nuget.config`.
    ACE for a service account that is not `LocalSystem`.
 4. `RunInit` (deferred, no-impersonate) runs
    `minivault.exe init --recovery <mode> --out %ProgramData%\MiniVault\recovery-<timestamp>.txt`.
-   A non-zero exit shows the CLI's own `Error:` line in the MSI error dialog and fails the install.
+   A non-zero exit shows the CLI's own `Error:` line in the MSI error dialog and fails the install —
+   **except** when the output indicates the vault is already initialized (the server's
+   `VaultAlreadyInitializedException` message), which happens on an upgrade over an existing,
+   already-initialized install: that case is treated as a no-op (an `INFO` message is logged and
+   the action succeeds) instead of failing the upgrade.
 5. Registers the `KarmasisMiniVault` service (`MsiServInstComponent`: auto start, `LocalSystem` by
    default via `MV_SERVICEACCOUNT`, description, restart-three-times failure actions) and starts it
    (`MsiServCtrlComponent` event 160 = start on install, stop on uninstall).

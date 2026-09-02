@@ -2,10 +2,14 @@
 <!--
   Classic (non-SDK) .NET Framework 4.8 project, deliberately NOT part of Karmasis.MiniVault.sln:
   it is Windows-only and is built by the Advanced Installer build step, not by the server CI job.
-  Build it with:
-      dotnet build setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions/Karmasis.MiniVault.CustomActions.csproj
-  or with MSBuild from Visual Studio Build Tools:
+  This project is built with MSBuild from Visual Studio / Visual Studio Build Tools, NOT
+  `dotnet build`: the .NET SDK's MSBuild does not import Microsoft.NuGet.targets, which is what
+  resolves PackageReference for a legacy (non-SDK) csproj, so `dotnet build` fails with
+  CS0246 ('IMsiSession' could not be found) even after a successful restore. Build it with:
       msbuild setups\AdvancedInstaller\Karmasis.MiniVault.CustomActions\Karmasis.MiniVault.CustomActions.csproj /p:Configuration=Release
+  (use vswhere -property installationPath to locate msbuild.exe on a build agent). The unit
+  tests can then be run with the .NET CLI against the already-built output; see
+  Karmasis.MiniVault.CustomActions.Tests and setups/AdvancedInstaller/README.md.
   Both Debug and Release write to bin\Release\ on purpose, so the paths referenced from
   Karmasis.MiniVault.aip never depend on which configuration was built.
 -->

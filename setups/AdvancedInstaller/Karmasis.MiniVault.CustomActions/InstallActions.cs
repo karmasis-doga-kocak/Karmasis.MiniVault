@@ -167,6 +167,18 @@ namespace Karmasis.MiniVault.CustomActions
 
                 if (result.ExitCode != 0)
                 {
+                    // Upgrades re-run RunInit against an already-initialized vault (the deferred
+                    // action has no way to know in advance). The server reports that with
+                    // VaultAlreadyInitializedException, surfaced by the CLI as an "already
+                    // initialized" error; treat it as a no-op rather than failing the install.
+                    if (IndicatesVaultAlreadyInitialized(result))
+                    {
+                        session.SendMessage(
+                            "MiniVault: Vault already initialized; skipping init (upgrade).",
+                            InstallMessage.INFO);
+                        return (int)ActionResult.Success;
+                    }
+
                     session.SendMessage(
                         "MiniVault: " + FirstErrorLine(result), InstallMessage.ERROR);
                     return (int)ActionResult.Failure;
@@ -283,6 +295,21 @@ namespace Karmasis.MiniVault.CustomActions
 
             return string.Format(CultureInfo.InvariantCulture,
                 "'minivault.exe init' failed with exit code {0}. {1}", result.ExitCode, fallback).Trim();
+        }
+
+        /// <summary>
+        /// True when the CLI's captured output indicates 'minivault.exe init' failed because the
+        /// vault was already initialized (VaultAlreadyInitializedException's message), rather than
+        /// some other error.
+        /// </summary>
+        internal static bool IndicatesVaultAlreadyInitialized(ProcessResult result)
+        {
+            return ContainsAlreadyInitialized(result.StdOut) || ContainsAlreadyInitialized(result.StdErr);
+        }
+
+        private static bool ContainsAlreadyInitialized(string text)
+        {
+            return text != null && text.IndexOf("already initialized", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string NullIfBlank(string value)

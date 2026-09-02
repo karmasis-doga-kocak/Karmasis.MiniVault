@@ -176,12 +176,29 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             {
                 var session = new FakeMsiSession(CustomActionData(
                     directory.Path, @"C:\MiniVault", ", MV_RECOVERY=\"single\""));
-                var runner = new FakeProcessRunner(1, string.Empty, "Error: the vault is already initialized.\n");
+                var runner = new FakeProcessRunner(1, string.Empty, "Error: could not open the vault database.\n");
 
                 InstallActions.RunInit(session, runner).ShouldBe((int)ActionResult.Failure);
 
                 session.LastMessage(InstallMessage.ERROR)
-                    .ShouldContain("Error: the vault is already initialized.");
+                    .ShouldContain("Error: could not open the vault database.");
+            }
+        }
+
+        [Fact]
+        public void RunInit_WhenTheVaultIsAlreadyInitialized_TreatsInitAsANoOpOnUpgradeAndSucceeds()
+        {
+            using (var directory = new TempDirectory(create: false))
+            {
+                var session = new FakeMsiSession(CustomActionData(
+                    directory.Path, @"C:\MiniVault", ", MV_RECOVERY=\"single\""));
+                var runner = new FakeProcessRunner(1, string.Empty,
+                    "Error: The vault is already initialized. Use 'minivault recover' to change the master key.\n");
+
+                InstallActions.RunInit(session, runner).ShouldBe((int)ActionResult.Success);
+
+                session.HasMessage(InstallMessage.ERROR).ShouldBeFalse();
+                session.LastMessage(InstallMessage.INFO).ShouldContain("already initialized");
             }
         }
 
