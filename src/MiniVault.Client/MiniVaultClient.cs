@@ -84,7 +84,12 @@ internal sealed class MiniVaultClient : IMiniVaultClient
         var cached = TryGetCached(name);
 
         // With background refresh on, memory is kept current by the timer; a read never goes to the server.
-        if (_options.RefreshInterval.HasValue && cached is not null) return cached.ToSecret();
+        if (_options.RefreshInterval.HasValue && cached is not null)
+        {
+            var stale = _now() - cached.FetchedAt > _options.MaxCacheAge;
+            if (stale) RaiseServedFromCache(name, stale: true, cached.FetchedAt);
+            return cached.ToSecret();
+        }
 
         try
         {
@@ -119,7 +124,7 @@ internal sealed class MiniVaultClient : IMiniVaultClient
             var stale = _now() - fallback.FetchedAt > _options.MaxCacheAge;
             _options.Log?.Invoke($"MiniVault served '{name}' from the local cache (fetched {fallback.FetchedAt:O}, stale: {stale}).");
             // Raised outside any lock, and after all cache state has settled.
-            SecretServedFromCache?.Invoke(this, new CacheServedEventArgs(name, stale, fallback.FetchedAt));
+            RaiseServedFromCache(name, stale, fallback.FetchedAt);
             return fallback.ToSecret();
         }
     }
@@ -220,10 +225,14 @@ internal sealed class MiniVaultClient : IMiniVaultClient
     /// <summary>
     /// Re-reads every secret currently held in memory with a conditional GET. Listing is deliberately not used:
     /// a client may be allowed to read its own secrets without being allowed to list. Per-secret failures are
-    /// logged and skipped, so one unreadable secret does not stop the rest from refreshing.
+    /// logged and skipped, so one unreadable secret does not stop the rest from refreshing. The disk cache is
+    /// written at most once, after the loop, and only if some secret actually changed — a conditional-GET-only
+    /// confirmation never touches disk, and a run of many secrets does not do one disk write per secret.
     /// </summary>
     private async Task RefreshAsync(CancellationToken ct)
     {
+        var changed = false;
+
         foreach (var entry in _memory.Snapshot())
         {
             if (Volatile.Read(ref _disposed) != 0) return;
@@ -239,12 +248,32 @@ internal sealed class MiniVaultClient : IMiniVaultClient
                 }
 
                 _memory.Set(ToEntry(entry.Name, result.Body));
-                PersistDisk();
+                changed = true;
             }
             catch (Exception ex)
             {
-                _options.Log?.Invoke($"MiniVault background refresh of '{entry.Name}' failed: {ex.Message}");
+                // Once disposed, the client is shutting down: a failure here is expected noise, not diagnostic.
+                if (Volatile.Read(ref _disposed) == 0)
+                    _options.Log?.Invoke($"MiniVault background refresh of '{entry.Name}' failed: {ex.Message}");
             }
+        }
+
+        if (changed) PersistDisk();
+    }
+
+    /// <summary>
+    /// Raises <see cref="SecretServedFromCache"/>, swallowing any exception a subscriber's handler throws so it
+    /// can never replace an already-resolved result with a fault.
+    /// </summary>
+    private void RaiseServedFromCache(string name, bool stale, DateTimeOffset fetchedAt)
+    {
+        try
+        {
+            SecretServedFromCache?.Invoke(this, new CacheServedEventArgs(name, stale, fetchedAt));
+        }
+        catch (Exception ex)
+        {
+            _options.Log?.Invoke($"MiniVault SecretServedFromCache handler threw: {ex.Message}");
         }
     }
 

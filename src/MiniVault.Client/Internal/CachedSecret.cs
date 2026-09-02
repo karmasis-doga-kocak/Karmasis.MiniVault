@@ -37,7 +37,17 @@ internal sealed class CachedSecret
     /// <summary>When this version was written on the server.</summary>
     public DateTimeOffset UpdatedAt { get; }
 
-    /// <summary>When this entry was fetched (or last confirmed) by the client.</summary>
+    /// <summary>
+    /// When this entry was fetched (or last confirmed) by the client.
+    /// <para>
+    /// On a 304 Not Modified response, only the in-memory copy's <see cref="FetchedAt"/> is advanced — the disk
+    /// copy is left with its older value (see <c>MiniVaultClient.GetSecretAsync</c> and <c>RefreshAsync</c>,
+    /// which update memory but do not persist on a conditional-GET confirmation). This is deliberate: if the
+    /// process restarts and later has to fall back to the disk copy while offline, staleness is judged against
+    /// the older, disk-recorded timestamp, so an offline fallback reports itself stale earlier than it otherwise
+    /// would — never later. The disk value is only ever pessimistic about freshness, never optimistic.
+    /// </para>
+    /// </summary>
     public DateTimeOffset FetchedAt { get; }
 
     /// <summary>

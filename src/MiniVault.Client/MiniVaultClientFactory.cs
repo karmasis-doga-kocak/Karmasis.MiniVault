@@ -42,18 +42,27 @@ public static class MiniVaultClientFactory
     /// Builds the handler used by <see cref="Create(MiniVaultOptions)"/>. When
     /// <see cref="MiniVaultOptions.ServerCertificateThumbprint"/> is set, a validation callback is installed
     /// that accepts the connection only when the presented certificate's thumbprint matches the configured one
-    /// (case-insensitive, ignoring <c>:</c> separators and spaces). Without a thumbprint no callback is
-    /// installed at all, so the platform's own validation stands — the client never accepts every certificate.
+    /// (case-insensitive; both sides are normalized to bare hex digits first). Without a thumbprint no callback
+    /// is installed at all, so the platform's own validation stands — the client never accepts every certificate.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <see cref="MiniVaultOptions.ServerCertificateThumbprint"/> is set but does not normalize to exactly 40 hex
+    /// characters (a SHA-1 thumbprint) — pinning is never silently skipped for an unusable value.
+    /// </exception>
     internal static HttpClientHandler CreateHandler(MiniVaultOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
 
         var handler = new HttpClientHandler();
 
-        var expected = NormalizeThumbprint(options.ServerCertificateThumbprint);
-        if (expected.Length > 0)
+        if (!string.IsNullOrWhiteSpace(options.ServerCertificateThumbprint))
         {
+            var expected = NormalizeThumbprint(options.ServerCertificateThumbprint!);
+            if (expected.Length != 40)
+                throw new ArgumentException(
+                    "ServerCertificateThumbprint must normalize to exactly 40 hex characters (a SHA-1 thumbprint).",
+                    nameof(options));
+
             handler.ServerCertificateCustomValidationCallback = (request, certificate, chain, errors) =>
                 certificate is not null &&
                 string.Equals(NormalizeThumbprint(certificate.Thumbprint), expected, StringComparison.OrdinalIgnoreCase);
@@ -62,16 +71,20 @@ public static class MiniVaultClientFactory
         return handler;
     }
 
-    /// <summary>Strips <c>:</c> separators and whitespace so pinned thumbprints can be pasted in any common format.</summary>
-    private static string NormalizeThumbprint(string? thumbprint)
+    /// <summary>
+    /// Keeps only ASCII hex digits, upper-cased, discarding everything else — <c>:</c> and <c>-</c> separators,
+    /// spaces, and invisible characters such as U+200E (LEFT-TO-RIGHT MARK), which the Windows certificate MMC
+    /// prepends when a thumbprint is copied from its property grid.
+    /// </summary>
+    internal static string NormalizeThumbprint(string value)
     {
-        if (string.IsNullOrWhiteSpace(thumbprint)) return "";
+        if (string.IsNullOrWhiteSpace(value)) return "";
 
-        var builder = new StringBuilder(thumbprint!.Length);
-        foreach (var c in thumbprint)
+        var builder = new StringBuilder(value.Length);
+        foreach (var c in value)
         {
-            if (c == ':' || char.IsWhiteSpace(c)) continue;
-            builder.Append(c);
+            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))
+                builder.Append(char.ToUpperInvariant(c));
         }
 
         return builder.ToString();

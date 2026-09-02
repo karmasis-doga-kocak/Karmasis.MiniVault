@@ -210,6 +210,33 @@ public class MiniVaultClientTests : IDisposable
         await Should.ThrowAsync<MiniVaultForbiddenException>(() => client.GetSecretAsync("a"));
 
         raised.ShouldBe(0);
+        // A 403 never invalidates the cache — the disk copy from the successful first read is still there.
+        new DiskCache(_dir, ClientId, ClientSecret, null).Load().ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Get_ServesDiskCache_HandlerThrows_DoesNotBreakResult()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+
+        using (var warm = new MiniVaultClient(Options(cacheDirectory: _dir), handler, () => T0))
+        {
+            (await warm.GetSecretAsync("a")).AsString().ShouldBe("v1");
+        }
+
+        var logs = new List<string>();
+        var options = Options(cacheDirectory: _dir);
+        options.Log = logs.Add;
+
+        using var client = new MiniVaultClient(options, new OfflineHandler(), () => T0);
+        client.SecretServedFromCache += (_, _) => throw new InvalidOperationException("boom");
+
+        var secret = await client.GetSecretAsync("a");
+
+        secret.AsString().ShouldBe("v1");
+        logs.ShouldContain(l => l.Contains("SecretServedFromCache handler threw"));
     }
 
     [Fact]
@@ -291,6 +318,33 @@ public class MiniVaultClientTests : IDisposable
     }
 
     [Fact]
+    public async Task RefreshInterval_ShortCircuit_RaisesStaleEvent_WhenOld()
+    {
+        var handler = new StubHandler();
+        Token(handler);
+        Secret200(handler, "a", "v1", 1);
+
+        var now = T0;
+        using var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMinutes(30)), handler, () => now);
+
+        await client.GetSecretAsync("a");
+
+        now = T0.AddDays(8);
+        CacheServedEventArgs? served = null;
+        client.SecretServedFromCache += (_, e) => served = e;
+
+        var before = handler.Requests.Count;
+        var secret = await client.GetSecretAsync("a");
+
+        secret.AsString().ShouldBe("v1");
+        handler.Requests.Count.ShouldBe(before);
+        served.ShouldNotBeNull();
+        served!.Name.ShouldBe("a");
+        served.Stale.ShouldBeTrue();
+        served.FetchedAt.ShouldBe(T0);
+    }
+
+    [Fact]
     public async Task BackgroundRefresh_UpdatesChangedSecret()
     {
         var handler = new StubHandler();
@@ -299,17 +353,26 @@ public class MiniVaultClientTests : IDisposable
         handler.Enqueue(HttpStatusCode.NotModified);
         Secret200(handler, "a", "v2", 2);
 
+        var v2Dequeued = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.OnResponse = response =>
+        {
+            if (response.Headers.ETag?.Tag == "\"2\"") v2Dequeued.TrySetResult(true);
+        };
+
         using var client = new MiniVaultClient(Options(refreshInterval: TimeSpan.FromMilliseconds(50)), handler, () => T0);
 
         (await client.GetSecretAsync("a")).Version.ShouldBe(1);
 
+        var signalled = await Task.WhenAny(v2Dequeued.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        signalled.ShouldBe(v2Dequeued.Task);
+
         Secret? latest = null;
         var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(3))
+        while (sw.Elapsed < TimeSpan.FromSeconds(1))
         {
             latest = await client.GetSecretAsync("a");
             if (latest.Version == 2) break;
-            await Task.Delay(25);
+            await Task.Delay(10);
         }
 
         latest.ShouldNotBeNull();
@@ -328,10 +391,11 @@ public class MiniVaultClientTests : IDisposable
         await client.GetSecretAsync("a");
 
         client.Dispose();
-        await Task.Delay(100);
+        // The window we assert over starts only after Dispose() has returned, so a tick already in flight when
+        // Dispose was called cannot be mistaken for the timer still running afterwards.
         var after = handler.Requests.Count;
 
-        await Task.Delay(300);
+        await Task.Delay(500);
 
         handler.Requests.Count.ShouldBe(after);
     }
@@ -367,9 +431,26 @@ public class MiniVaultClientTests : IDisposable
         plain.ServerCertificateCustomValidationCallback.ShouldBeNull();
 
         var pinned = Options();
-        pinned.ServerCertificateThumbprint = "AA:BB:CC";
+        pinned.ServerCertificateThumbprint = string.Join(":", Enumerable.Repeat("AB", 20));
         using var handler = MiniVaultClientFactory.CreateHandler(pinned);
         handler.ServerCertificateCustomValidationCallback.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void Factory_CreateHandler_Throws_WhenThumbprintDoesNotNormalizeTo40HexChars()
+    {
+        var options = Options();
+        options.ServerCertificateThumbprint = "::";
+        Should.Throw<ArgumentException>(() => MiniVaultClientFactory.CreateHandler(options));
+    }
+
+    [Fact]
+    public void NormalizeThumbprint_KeepsOnlyHexDigits_UpperCased()
+    {
+        // U+200E LEFT-TO-RIGHT MARK, as the Windows certificate MMC prepends when a thumbprint is copied.
+        MiniVaultClientFactory.NormalizeThumbprint("‎ab:cd-ef 01").ShouldBe("ABCDEF01");
+        MiniVaultClientFactory.NormalizeThumbprint("aa:bb:cc:dd").ShouldBe("AABBCCDD");
+        MiniVaultClientFactory.NormalizeThumbprint("  ").ShouldBe("");
     }
 
 #if NET10_0

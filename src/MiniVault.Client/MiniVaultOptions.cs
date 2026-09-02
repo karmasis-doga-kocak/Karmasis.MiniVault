@@ -51,7 +51,9 @@ public sealed class MiniVaultOptions
     /// Validates the options. Throws <see cref="ArgumentException"/> when <see cref="BaseUrl"/>,
     /// <see cref="ClientId"/>, or <see cref="ClientSecret"/> is missing, when <see cref="BaseUrl"/> is not a
     /// well-formed absolute URL, when it does not use <c>https</c> and <see cref="AllowInsecureHttp"/> is not set,
-    /// or when <see cref="Timeout"/> is not positive.
+    /// when <see cref="Timeout"/> is not positive, or when <see cref="ServerCertificateThumbprint"/> is set but
+    /// does not normalize to exactly 40 hex characters (a SHA-1 thumbprint) — an unusable pin fails closed here
+    /// rather than being silently skipped later.
     /// </summary>
     public void Validate()
     {
@@ -66,5 +68,13 @@ public sealed class MiniVaultOptions
             throw new ArgumentException("BaseUrl must use https:// unless AllowInsecureHttp is set.", nameof(BaseUrl));
 
         if (Timeout <= TimeSpan.Zero) throw new ArgumentException("Timeout must be positive.", nameof(Timeout));
+
+        if (!string.IsNullOrWhiteSpace(ServerCertificateThumbprint) &&
+            MiniVaultClientFactory.NormalizeThumbprint(ServerCertificateThumbprint!).Length != 40)
+        {
+            throw new ArgumentException(
+                "ServerCertificateThumbprint must normalize to exactly 40 hex characters (a SHA-1 thumbprint).",
+                nameof(ServerCertificateThumbprint));
+        }
     }
 }

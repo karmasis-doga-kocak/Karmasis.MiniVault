@@ -82,4 +82,36 @@ public class MiniVaultOptionsTests
         options.Timeout = TimeSpan.FromSeconds(-1);
         Should.Throw<ArgumentException>(() => options.Validate());
     }
+
+    [Fact]
+    public void Validate_Throws_WhenThumbprintNormalizesToEmpty()
+    {
+        var options = Valid();
+        options.ServerCertificateThumbprint = "::";
+        Should.Throw<ArgumentException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void Validate_Throws_WhenThumbprintIs39HexChars()
+    {
+        var options = Valid();
+        options.ServerCertificateThumbprint = new string('A', 39);
+        Should.Throw<ArgumentException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void Validate_Passes_WhenThumbprintIs40HexChars_WithColons()
+    {
+        var options = Valid();
+        options.ServerCertificateThumbprint = string.Join(":", Enumerable.Repeat("AB", 20));
+        Should.NotThrow(() => options.Validate());
+    }
+
+    [Fact]
+    public void Validate_Passes_WhenThumbprintIsNull()
+    {
+        var options = Valid();
+        options.ServerCertificateThumbprint = null;
+        Should.NotThrow(() => options.Validate());
+    }
 }
