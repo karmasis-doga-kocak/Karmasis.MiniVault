@@ -48,15 +48,30 @@ public static class SecretEndpoints
                 return Results.Json(new ErrorResponse { Error = ErrorResponse.Forbidden }, statusCode: StatusCodes.Status403Forbidden);
             }
 
+            if (request.Value is null)
+            {
+                await audit.WriteAsync(clientId, "secret.write", name, false, http.RemoteIp(), "invalid value", ct);
+                return Results.BadRequest(new ErrorResponse { Error = ErrorResponse.InvalidRequest, Detail = "value is required (base64)." });
+            }
+
             byte[] value;
-            try { value = Convert.FromBase64String(request.Value ?? ""); }
+            try { value = Convert.FromBase64String(request.Value); }
             catch (FormatException)
             {
                 await audit.WriteAsync(clientId, "secret.write", name, false, http.RemoteIp(), "invalid base64", ct);
                 return Results.BadRequest(new ErrorResponse { Error = ErrorResponse.InvalidRequest, Detail = "Value must be base64-encoded." });
             }
 
-            var version = await secrets.SetAsync(name, value, request.ContentType, clientId, ct);
+            int version;
+            try
+            {
+                version = await secrets.SetAsync(name, value, request.ContentType, clientId, ct);
+            }
+            catch (Exception ex) when (ex is ArgumentException or SecretConflictException or SecretNotFoundException)
+            {
+                await audit.WriteAsync(clientId, "secret.write", name, false, http.RemoteIp(), ex.GetType().Name, ct);
+                throw;
+            }
             await audit.WriteAsync(clientId, "secret.write", name, true, http.RemoteIp(), null, ct);
             return Results.Ok(new SetSecretResponse { Version = version });
         });
@@ -76,10 +91,10 @@ public static class SecretEndpoints
             {
                 await secrets.DeleteAsync(name, ct);
             }
-            catch (SecretNotFoundException)
+            catch (Exception ex) when (ex is ArgumentException or SecretConflictException or SecretNotFoundException)
             {
-                await audit.WriteAsync(clientId, "secret.delete", name, false, http.RemoteIp(), "not found", ct);
-                return Results.Json(new ErrorResponse { Error = ErrorResponse.NotFound }, statusCode: 404);
+                await audit.WriteAsync(clientId, "secret.delete", name, false, http.RemoteIp(), ex.GetType().Name, ct);
+                throw;
             }
 
             await audit.WriteAsync(clientId, "secret.delete", name, true, http.RemoteIp(), null, ct);

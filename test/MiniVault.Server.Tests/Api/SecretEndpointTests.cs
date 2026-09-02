@@ -108,10 +108,48 @@ public class SecretEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTest
     {
         var webui = await fixture.ClientWithTokenAsync("webui");
         var tooLarge = new byte[1_048_577];
+        const string name = "dataskope/too-large";
 
-        var response = await webui.PutAsJsonAsync("/v1/secrets/dataskope/too-large", new SetSecretRequest { Value = Convert.ToBase64String(tooLarge) });
+        var response = await webui.PutAsJsonAsync($"/v1/secrets/{name}", new SetSecretRequest { Value = Convert.ToBase64String(tooLarge) });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var audits = await fixture.AuditAsync();
+        audits.ShouldContain(a => a.Action == "secret.write" && !a.Success && a.SecretName == name);
+    }
+
+    [Fact]
+    public async Task Put_MissingValue_400()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+        const string name = "dataskope/missing-value";
+        var content = new StringContent("{\"contentType\":\"text/plain\"}", Encoding.UTF8, "application/json");
+
+        var response = await webui.PutAsync($"/v1/secrets/{name}", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+
+        var getResponse = await webui.GetAsync($"/v1/secrets/{name}");
+        getResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Put_NullValue_400()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+        const string name = "dataskope/null-value";
+        var content = new StringContent("{\"value\":null}", Encoding.UTF8, "application/json");
+
+        var response = await webui.PutAsync($"/v1/secrets/{name}", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+
+        var getResponse = await webui.GetAsync($"/v1/secrets/{name}");
+        getResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]

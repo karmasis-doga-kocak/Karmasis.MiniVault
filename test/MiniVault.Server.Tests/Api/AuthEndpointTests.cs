@@ -70,6 +70,19 @@ public class AuthEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTestFi
     }
 
     [Fact]
+    public async Task Token_MalformedJsonBody_400()
+    {
+        var http = fixture.Factory.CreateClient();
+        var content = new StringContent("{\"clientId\":", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await http.PostAsync("/v1/auth/token", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+    }
+
+    [Fact]
     public async Task Expired_Token_ReturnsUnauthorized()
     {
         await using var db = await TestDatabase.CreateAsync(migrate: false);

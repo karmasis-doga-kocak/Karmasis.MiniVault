@@ -20,6 +20,7 @@ public static class ErrorHandling
             {
                 SecretNotFoundException => (404, new ErrorResponse { Error = ErrorResponse.NotFound }),
                 SecretConflictException => (409, new ErrorResponse { Error = ErrorResponse.Conflict, Detail = "The secret was modified concurrently; retry." }),
+                UnauthorizedAccessException => (401, new ErrorResponse { Error = ErrorResponse.Unauthorized }),
                 ArgumentException or BadHttpRequestException or JsonException => (400, new ErrorResponse { Error = ErrorResponse.InvalidRequest, Detail = ex.Message }),
                 VaultException or KeyNotFoundException or MasterKeyUnavailableException or SqlException or DbUpdateException => (503, new ErrorResponse { Error = ErrorResponse.VaultUnavailable, Detail = "The vault is temporarily unavailable." }),
                 _ => (500, new ErrorResponse { Error = "internal_error" }),
