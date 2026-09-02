@@ -13,6 +13,7 @@ public static class MiniVaultCoreServiceCollectionExtensions
         services.AddMasterKeyProvider(configuration);
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<VaultInitializer>();
+        services.AddScoped<VaultRecovery>();
         services.AddSingleton<DataKeyRing>();
         return services;
     }
