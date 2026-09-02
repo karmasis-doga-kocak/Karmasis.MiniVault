@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Classic (non-SDK) .NET Framework 4.8 project, deliberately NOT part of Karmasis.MiniVault.sln:
+  it is Windows-only and is built by the Advanced Installer build step, not by the server CI job.
+  Build it with:
+      dotnet build setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions/Karmasis.MiniVault.CustomActions.csproj
+  or with MSBuild from Visual Studio Build Tools:
+      msbuild setups\AdvancedInstaller\Karmasis.MiniVault.CustomActions\Karmasis.MiniVault.CustomActions.csproj /p:Configuration=Release
+  Both Debug and Release write to bin\Release\ on purpose, so the paths referenced from
+  Karmasis.MiniVault.aip never depend on which configuration was built.
+-->
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <!-- The repo-root Directory.Build.props turns these on for the net10.0 projects; this one is
+         classic C# and does not use nullable reference types or implicit usings. -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{7C3E9A41-5D2B-4E6F-9A18-3B0C7D4E5F62}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Karmasis.MiniVault.CustomActions</RootNamespace>
+    <AssemblyName>Karmasis.MiniVault.CustomActions</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <!-- System.Data.SqlClient (TestSqlConnection) ships in System.Data on .NET Framework. -->
+    <Reference Include="System.Data" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="DirectoryAcl.cs" />
+    <Compile Include="InstallActions.cs" />
+    <Compile Include="MachineConfigWriter.cs" />
+    <Compile Include="MiniVaultCli.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Karmasis.AdvancedInstallerKit comes from the Karmasis private feed (artifactrepodev); see
+         setups/AdvancedInstaller/README.md for the nuget-dev.config the build agent needs. -->
+    <PackageReference Include="Karmasis.AdvancedInstallerKit">
+      <Version>25.1.2</Version>
+    </PackageReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

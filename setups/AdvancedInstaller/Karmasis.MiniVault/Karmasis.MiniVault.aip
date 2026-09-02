@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Karmasis MiniVault - Advanced Installer project.
+
+  Authored by hand (Advanced Installer 22.x XML), adapted from
+  Karmasis.Classic.DataskopeCollector/setups/AdvancedInstaller/DAM.Collector/DAM.Collector.aip.
+  It has NOT been opened in the Advanced Installer designer or built into an MSI yet; see
+  ../README.md for the build order and the designer follow-ups (the four configuration pages).
+
+  Differences from the Collector project worth knowing about:
+    * No .NET Framework launch condition - MiniVault publishes self-contained (win-x64).
+    * The payload is a SynchronizedFolderComponent over the publish output, so the file list is
+      resolved by Advanced Installer at build time instead of being enumerated here.
+    * The standard dialog set is used as-is; the MV_* properties below are what an unattended
+      install sets on the msiexec command line.
+-->
+<DOCUMENT Type="Advanced Installer" CreateVersion="22.8" version="22.8" PreviousModules="professional" Modules="professional" RootPath="." Language="en" Id="{1E3F7656-2DD8-4374-B57E-9777FCB215B4}">
+  <COMPONENT cid="caphyon.advinst.msicomp.ProjectOptionsComponent">
+    <ROW Name="HiddenItems" Value="ActSyncAppComponent;CPLAppletComponent;AutorunComponent;GameUxComponent;SilverlightSlnComponent;SharePointSlnComponent"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiPropsComponent">
+    <ROW Property="AI_BITMAP_DISPLAY_MODE" Value="0"/>
+    <ROW Property="AI_PRODUCTNAME_ARP" Value="[|ProductName]"/>
+    <ROW Property="AI_UNINSTALLER" Value="msiexec.exe"/>
+    <ROW Property="ALLUSERS" Value="1"/>
+    <ROW Property="ARPCOMMENTS" Value="This installer database contains the logic and data required to install [|ProductName]." ValueLocId="*"/>
+    <ROW Property="ARPSYSTEMCOMPONENT" Value="1"/>
+    <ROW Property="AiEmbeddedUI" Value="1" MultiBuildValue="DefaultBuild:"/>
+    <ROW Property="BannerBitmap" Value="banner.bmp" MultiBuildValue="DefaultBuild:banner.bmp" Type="1" MsiKey="BannerBitmap"/>
+    <ROW Property="DialogBitmap" Value="background.bmp" MultiBuildValue="DefaultBuild:background.bmp" Type="1" MsiKey="DialogBitmap"/>
+    <ROW Property="DisplayName" Value="Karmasis MiniVault"/>
+    <ROW Property="Manufacturer" Value="Karmasis"/>
+    <ROW Property="ProductCode" Value="1033:{60F58B69-8AE2-48EE-918D-B223CEE15D2D} " Type="16"/>
+    <ROW Property="ProductLanguage" Value="1033"/>
+    <ROW Property="ProductName" Value="Karmasis MiniVault"/>
+    <ROW Property="ProductVersion" Value="0.1.0" Options="32"/>
+    <ROW Property="ServiceName" Value="KarmasisMiniVault"/>
+    <ROW Property="UpgradeCode" Value="{49C997F8-49AB-40B5-B736-4D4D59CA7762}"/>
+    <!-- MV_* are the installer's public inputs. Every one of them is listed in
+         SecureCustomProperties so msiexec keeps it across the elevated/deferred boundary, and the
+         three secrets are listed in MsiHiddenProperties so they do not land in the MSI log. -->
+    <ROW Property="MV_CONNECTIONSTRING" Value=""/>
+    <ROW Property="MV_SERVICEACCOUNT" Value="LocalSystem"/>
+    <ROW Property="MV_RECOVERY" Value="single"/>
+    <ROW Property="MV_SHARES" Value="3"/>
+    <ROW Property="MV_THRESHOLD" Value="2"/>
+    <ROW Property="MV_MASTERKEY" Value=""/>
+    <ROW Property="MV_CERT_PATH" Value=""/>
+    <ROW Property="MV_CERT_PASSWORD" Value=""/>
+    <ROW Property="MV_CERT_THUMBPRINT" Value=""/>
+    <ROW Property="MV_URL" Value="https://0.0.0.0:8200"/>
+    <ROW Property="MV_SQL_OK" Value="0"/>
+    <ROW Property="MV_SQL_ERROR" Value=""/>
+    <ROW Property="MsiHiddenProperties" Value="MV_CONNECTIONSTRING;MV_CERT_PASSWORD;MV_MASTERKEY"/>
+    <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND;MV_CONNECTIONSTRING;MV_SERVICEACCOUNT;MV_RECOVERY;MV_SHARES;MV_THRESHOLD;MV_MASTERKEY;MV_CERT_PATH;MV_CERT_PASSWORD;MV_CERT_THUMBPRINT;MV_URL;MV_SQL_OK;MV_SQL_ERROR"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiDirsComponent">
+    <ROW Directory="APPDIR" Directory_Parent="TARGETDIR" DefaultDir="APPDIR:." IsPseudoRoot="1"/>
+    <ROW Directory="TARGETDIR" DefaultDir="SourceDir"/>
+    <ROW Directory="TempFolder" Directory_Parent="TARGETDIR" DefaultDir="TEMPFO~1|TempFolder" IsPseudoRoot="1"/>
+    <ROW Directory="ProductCode_Dir" Directory_Parent="TempFolder" DefaultDir="{2E07C~1|[|ProductCode]"/>
+    <ROW Directory="CommonAppDataFolder" Directory_Parent="TARGETDIR" DefaultDir="COMMON~1|CommonAppDataFolder" IsPseudoRoot="1"/>
+    <ROW Directory="MiniVaultData_Dir" Directory_Parent="CommonAppDataFolder" DefaultDir="MiniVault"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiCompsComponent">
+    <ROW Component="AI_CustomARPName" ComponentId="{F3B949D5-5057-405D-B94A-754129DC672B}" Directory_="APPDIR" Attributes="260" KeyPath="DisplayName" Options="1"/>
+    <ROW Component="APPDIR" ComponentId="{765CBC34-C924-4D3B-8A21-9249376F04FE}" Directory_="APPDIR" Attributes="0"/>
+    <ROW Component="ProductInformation" ComponentId="{002B0E32-78B5-4B3F-AA0A-32A8E1388DEE}" Directory_="APPDIR" Attributes="4" KeyPath="Path"/>
+    <ROW Component="minivault.exe" ComponentId="{69D25E48-E926-4F70-BED3-E4A7A755C8FE}" Directory_="APPDIR" Attributes="0" KeyPath="minivault.exe"/>
+    <!-- %ProgramData%\MiniVault: created by the MSI, permissions applied by LockPermissions and
+         then re-applied by the WriteMachineConfig custom action (same grants as install.ps1).
+         Attributes 16 = msidbComponentAttributesPermanent: an uninstall leaves the folder, and with
+         it appsettings.json and the DPAPI-protected master key, in place. -->
+    <ROW Component="MiniVaultData" ComponentId="{039355A6-1236-4CBD-A9E8-9CF539019A31}" Directory_="MiniVaultData_Dir" Attributes="16"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatsComponent">
+    <ROW Feature="MainFeature" Title="MainFeature" Description="Karmasis MiniVault server" Display="1" Level="1" Directory_="APPDIR" Attributes="0"/>
+    <ATTRIBUTE name="CurrentFeature" value="MainFeature"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiFilesComponent">
+    <!-- Only the service executable is listed explicitly, because it is the KeyPath of the
+         component the ServiceInstall/ServiceControl rows hang off. Every other file in the publish
+         output is picked up by the SynchronizedFolderComponent at the end of this file. -->
+    <ROW File="minivault.exe" Component_="minivault.exe" FileName="minivault.exe" Attributes="0" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64\minivault.exe" SelfReg="false" DigSign="true"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatCompsComponent">
+    <ROW Feature_="MainFeature" Component_="APPDIR"/>
+    <ROW Feature_="MainFeature" Component_="AI_CustomARPName"/>
+    <ROW Feature_="MainFeature" Component_="ProductInformation"/>
+    <ROW Feature_="MainFeature" Component_="minivault.exe"/>
+    <ROW Feature_="MainFeature" Component_="MiniVaultData"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiCreateFolderComponent">
+    <ROW Directory_="APPDIR" Component_="APPDIR" ManualDelete="true"/>
+    <ROW Directory_="MiniVaultData_Dir" Component_="MiniVaultData"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiLockPermissionsComponent">
+    <!-- 268435456 = GENERIC_ALL. SIDs are used instead of names because the group names are
+         localized. The WriteMachineConfig custom action applies the same two ACEs (plus a
+         read/execute ACE for a non-LocalSystem service account) after the files are installed. -->
+    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" Domain="" User="S-1-5-18" Permission="268435456"/>
+    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" Domain="" User="S-1-5-32-544" Permission="268435456"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiServInstComponent">
+    <ROW ServiceInstall="minivault.exe" Name="[ServiceName]" DisplayName="[DisplayName]" ServiceType="16" StartType="2" ErrorControl="1" StartName="[MV_SERVICEACCOUNT]" Component_="minivault.exe" Description="Karmasis MiniVault secret vault server."/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiServCtrlComponent">
+    <!-- Event 160 = start on install (0x20) + stop on uninstall (0x80); Wait=1. -->
+    <ROW ServiceControl="minivault.exe" Name="[ServiceName]" Event="160" Wait="1" Component_="minivault.exe"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiServConfigComponent">
+    <ROW MsiServiceConfig="ServiceName" Name="[ServiceName]" Event="1" ConfigType="4" Argument="1" Component_="minivault.exe"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiServConfigFailureActionsComponent">
+    <!-- Restart three times, 5 s apart, same as 'sc.exe failure ... actions= restart/5000/...'. -->
+    <ROW MsiServiceConfigFailureActions="ServiceName" Name="[ServiceName]" Event="1" ResetPeriod="86400" RebootMessage="[~]" Actions="1[~]1[~]1" DelayActions="5000[~]5000[~]5000" Component_="minivault.exe"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiBinaryComponent">
+    <ROW Name="DotNetMethodCaller.dll" SourcePath="&lt;AI_CUSTACTS&gt;DotNetMethodCaller.dll"/>
+    <ROW Name="ExternalUICleaner.dll" SourcePath="&lt;AI_CUSTACTS&gt;ExternalUICleaner.dll"/>
+    <ROW Name="aicustact.dll" SourcePath="&lt;AI_CUSTACTS&gt;aicustact.dll"/>
+    <ROW Name="tempFiles.dll" SourcePath="&lt;AI_CUSTACTS&gt;tempFiles.dll"/>
+    <ROW Name="background.bmp" SourcePath="..\img\background.bmp"/>
+    <ROW Name="banner.bmp" SourcePath="..\img\banner.bmp"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.TempFileComponent">
+    <!-- The managed custom-actions assembly cannot be a Binary-table DLL custom action (it has no
+         native entry point), so - exactly as the Collector project does - it is extracted to
+         %TEMP%\[ProductCode]\ and invoked through Advanced Installer's DotNetMethodCaller.dll.
+         These two paths are what verify-aip.ps1 checks against the project's output folder. -->
+    <ROW FileId="karmasis.minivault.customactions.dl" Name="KARMAS~1.DLL|Karmasis.MiniVault.CustomActions.dll" Directory_="ProductCode_Dir" Property="AI_KARMASIS.MINIVAULT.CUSTOMACTIONS.DL" Options="0" Data="..\Karmasis.MiniVault.CustomActions\bin\Release\Karmasis.MiniVault.CustomActions.dll"/>
+    <ROW FileId="karmasis.advancedinstallerkit.dll" Name="KARMAS~2.DLL|Karmasis.AdvancedInstallerKit.dll" Directory_="ProductCode_Dir" Property="AI_KARMASIS.ADVANCEDINSTALLERKIT.DLL" Options="0" Data="..\Karmasis.MiniVault.CustomActions\bin\Release\Karmasis.AdvancedInstallerKit.dll"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiCustActComponent">
+    <!-- Type 51 property setters. For a deferred action the property name must equal the action
+         name; that is how MSI hands it its CustomActionData. The '|[&amp;fileid]|Type.Method' tail is
+         what DotNetMethodCaller reads to find the assembly and the method to call. -->
+    <ROW Action="AI_DATA_SETTER" Type="51" Source="WriteMachineConfig" Target="MV_CONNECTIONSTRING=&quot;[MV_CONNECTIONSTRING]&quot;, MV_SERVICEACCOUNT=&quot;[MV_SERVICEACCOUNT]&quot;, MV_URL=&quot;[MV_URL]&quot;, MV_CERT_PATH=&quot;[MV_CERT_PATH]&quot;, MV_CERT_PASSWORD=&quot;[MV_CERT_PASSWORD]&quot;, MV_CERT_THUMBPRINT=&quot;[MV_CERT_THUMBPRINT]&quot;, MV_PROGRAMDATA=&quot;[CommonAppDataFolder]MiniVault&quot;, APPDIR=&quot;[APPDIR]&quot;;|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.WriteMachineConfig"/>
+    <ROW Action="AI_DATA_SETTER_1" Type="51" Source="RunInit" Target="MV_RECOVERY=&quot;[MV_RECOVERY]&quot;, MV_SHARES=&quot;[MV_SHARES]&quot;, MV_THRESHOLD=&quot;[MV_THRESHOLD]&quot;, MV_MASTERKEY=&quot;[MV_MASTERKEY]&quot;, MV_PROGRAMDATA=&quot;[CommonAppDataFolder]MiniVault&quot;, APPDIR=&quot;[APPDIR]&quot;;|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.RunInit"/>
+    <ROW Action="AI_DATA_SETTER_2" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.TestSqlConnection"/>
+    <ROW Action="AI_DATA_SETTER_3" Type="51" Source="AI_RemoveAllTempFiles" Target="[AI_TEMP_FILE_ROLLBACK_INFO]"/>
+    <!-- Type 3073 = 1 (DLL in Binary table) + 1024 (deferred/InScript) + 2048 (NoImpersonate):
+         runs in the elevated service context, between InstallFiles and InstallServices. -->
+    <ROW Action="WriteMachineConfig" Type="3073" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER"/>
+    <ROW Action="RunInit" Type="3073" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_1"/>
+    <!-- Type 65 = 1 (DLL in Binary table) + 64 (ignore the return value): immediate, not sequenced.
+         Wire it to the SqlDlg "Test connection" button once that page exists; it sets MV_SQL_OK
+         (1/0) and MV_SQL_ERROR and never fails the installation. -->
+    <ROW Action="TestSqlConnection" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_2" WithoutSeq="true"/>
+    <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>
+    <ROW Action="AI_DoRemoveExternalUIStub" Type="3585" Source="ExternalUICleaner.dll" Target="DoRemoveExternalUIStub" WithoutSeq="true"/>
+    <ROW Action="AI_DpiContentScale" Type="1" Source="aicustact.dll" Target="DpiContentScale"/>
+    <ROW Action="AI_EnableDebugLog" Type="321" Source="aicustact.dll" Target="EnableDebugLog"/>
+    <ROW Action="AI_ExtractTempFiles" Type="1" Source="tempFiles.dll" Target="ExtractTempFiles"/>
+    <ROW Action="AI_GetArpIconPath" Type="1" Source="aicustact.dll" Target="GetArpIconPath"/>
+    <ROW Action="AI_InstallModeCheck" Type="1" Source="aicustact.dll" Target="UpdateInstallMode" WithoutSeq="true"/>
+    <ROW Action="AI_PREPARE_UPGRADE" Type="65" Source="aicustact.dll" Target="PrepareUpgrade"/>
+    <ROW Action="AI_PRESERVE_INSTALL_TYPE" Type="65" Source="aicustact.dll" Target="PreserveInstallType"/>
+    <ROW Action="AI_RESTORE_LOCATION" Type="65" Source="aicustact.dll" Target="RestoreLocation"/>
+    <ROW Action="AI_RemoveAllTempFiles" Type="1281" Source="tempFiles.dll" Target="RemoveAllTempFiles" AdditionalSeq="AI_DATA_SETTER_3"/>
+    <ROW Action="AI_RemoveExternalUIStub" Type="1" Source="ExternalUICleaner.dll" Target="RemoveExternalUIStub"/>
+    <ROW Action="AI_RemoveTempFiles" Type="1" Source="tempFiles.dll" Target="RemoveTempFiles" WithoutSeq="true"/>
+    <ROW Action="AI_ResolveKnownFolders" Type="1" Source="aicustact.dll" Target="AI_ResolveKnownFolders"/>
+    <ROW Action="AI_SHOW_LOG" Type="65" Source="aicustact.dll" Target="LaunchLogFile" WithoutSeq="true"/>
+    <ROW Action="AI_STORE_LOCATION" Type="51" Source="ARPINSTALLLOCATION" Target="[APPDIR]"/>
+    <ROW Action="SET_APPDIR" Type="307" Source="APPDIR" Target="[ProgramFilesFolder]Karmasis\MiniVault" MultiBuildTarget="DefaultBuild:[ProgramFiles64Folder]Karmasis\MiniVault"/>
+    <ROW Action="SET_TARGETDIR_TO_APPDIR" Type="51" Source="TARGETDIR" Target="[APPDIR]"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiInstExSeqComponent">
+    <ROW Action="AI_DOWNGRADE" Condition="AI_NEWERPRODUCTFOUND AND (UILevel &lt;&gt; 5)" Sequence="210"/>
+    <ROW Action="AI_EnableDebugLog" Sequence="51"/>
+    <ROW Action="AI_ResolveKnownFolders" Sequence="52"/>
+    <ROW Action="AI_RESTORE_LOCATION" Condition="APPDIR=&quot;&quot;" Sequence="749"/>
+    <ROW Action="AI_ExtractTempFiles" Sequence="1001"/>
+    <ROW Action="AI_PREPARE_UPGRADE" Condition="AI_UPGRADE=&quot;No&quot; AND (Not Installed)" Sequence="1397"/>
+    <ROW Action="AI_GetArpIconPath" Sequence="1403"/>
+    <ROW Action="AI_DATA_SETTER_3" Sequence="1503"/>
+    <ROW Action="AI_RemoveAllTempFiles" Sequence="1504"/>
+    <ROW Action="AI_RemoveExternalUIStub" Condition="(REMOVE=&quot;ALL&quot;) AND ((VersionNT &gt; 500) OR((VersionNT = 500) AND (ServicePackLevel &gt;= 4)))" Sequence="1505"/>
+    <ROW Action="AI_STORE_LOCATION" Condition="(Not Installed) OR REINSTALL" Sequence="1506"/>
+    <!-- Between InstallFiles (4000) and InstallServices (5800)/StartServices (5900): the config file
+         and the initialized database must both exist before the service is allowed to start. -->
+    <ROW Action="AI_DATA_SETTER" Condition="( NOT Installed )" Sequence="4500"/>
+    <ROW Action="WriteMachineConfig" Condition="( NOT Installed )" Sequence="4501"/>
+    <ROW Action="AI_DATA_SETTER_1" Condition="( NOT Installed )" Sequence="4502"/>
+    <ROW Action="RunInit" Condition="( NOT Installed )" Sequence="4503"/>
+    <ROW Action="AI_RemoveTempFiles" Sequence="6601"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiInstallUISequenceComponent">
+    <ROW Action="AI_EnableDebugLog" Sequence="51"/>
+    <ROW Action="AI_DpiContentScale" Sequence="52"/>
+    <ROW Action="AI_ResolveKnownFolders" Sequence="53"/>
+    <ROW Action="AI_PRESERVE_INSTALL_TYPE" Sequence="199"/>
+    <ROW Action="AI_RESTORE_LOCATION" Condition="APPDIR=&quot;&quot;" Sequence="749"/>
+    <ROW Action="AI_ExtractTempFiles" Sequence="1001"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.BootstrapperUISequenceComponent">
+    <ROW Action="AI_BACKUP_AI_SETUPEXEPATH" Sequence="249"/>
+    <ROW Action="AI_RESTORE_AI_SETUPEXEPATH" Condition="AI_SETUPEXEPATH_ORIGINAL" Sequence="251"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiLaunchConditionsComponent">
+    <!-- 64-bit Windows only. Deliberately no .NET Framework condition: the server is published
+         self-contained for win-x64, so no runtime has to be present on the target machine. -->
+    <ROW Condition="VersionNT64" Description="[ProductName] can only be installed on 64-bit Windows." DescriptionLocId="AI.LaunchCondition.NoNT" IsPredefined="true" Builds="DefaultBuild"/>
+    <ROW Condition="(VersionNT &gt;= 603)" Description="[ProductName] requires Windows 8.1 / Windows Server 2012 R2 or later." Builds="DefaultBuild"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiRegsComponent">
+    <ROW Registry="Comments" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="Comments" Value="[ARPCOMMENTS]" Component_="AI_CustomARPName"/>
+    <ROW Registry="DisplayIcon" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="DisplayIcon" Value="[ARP_ICON_PATH]" Component_="AI_CustomARPName"/>
+    <ROW Registry="DisplayName" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="DisplayName" Value="[AI_PRODUCTNAME_ARP]" Component_="AI_CustomARPName"/>
+    <ROW Registry="DisplayVersion" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="DisplayVersion" Value="[ProductVersion]" Component_="AI_CustomARPName"/>
+    <ROW Registry="InstallLocation" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="InstallLocation" Value="[APPDIR]" Component_="AI_CustomARPName"/>
+    <ROW Registry="Manufacturer" Root="-1" Key="Software\[Manufacturer]" Name="\"/>
+    <ROW Registry="Microsoft" Root="-1" Key="Software\Microsoft" Name="\"/>
+    <ROW Registry="Path" Root="-1" Key="Software\[Manufacturer]\[ProductName]" Name="Path" Value="[APPDIR]" Component_="ProductInformation"/>
+    <ROW Registry="ProductName" Root="-1" Key="Software\[Manufacturer]\[ProductName]" Name="\"/>
+    <ROW Registry="ProductNameProductVersion" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="\"/>
+    <ROW Registry="Publisher" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="Publisher" Value="[Manufacturer]" Component_="AI_CustomARPName"/>
+    <ROW Registry="Software" Root="-1" Key="Software" Name="\"/>
+    <ROW Registry="Uninstall" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall" Name="\"/>
+    <ROW Registry="UninstallString" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="UninstallString" Value="[AI_UNINSTALLER] /i [ProductCode] AI_UNINSTALLER_CTP=1" Component_="AI_CustomARPName"/>
+    <ROW Registry="Version" Root="-1" Key="Software\[Manufacturer]\[ProductName]" Name="Version" Value="[ProductVersion]" Component_="ProductInformation"/>
+    <ROW Registry="Windows" Root="-1" Key="Software\Microsoft\Windows" Name="\"/>
+    <ROW Registry="CurrentVersion" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion" Name="\"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiUpgradeComponent">
+    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="0.0.1" VersionMax="[|ProductVersion]" Attributes="257" ActionProperty="OLDPRODUCTS"/>
+    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="[|ProductVersion]" Attributes="2" ActionProperty="AI_NEWERPRODUCTFOUND"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.SynchronizedFolderComponent">
+    <!-- The whole self-contained publish output. Produce it before building the MSI with:
+             dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64 -->
+    <ROW Directory_="APPDIR" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64" Feature="MainFeature" ExcludePattern="*~|#*#|%*%|._|CVS|.cvsignore|SCCS|vssver.scc|mssccprj.scc|vssver2.scc|.svn|.DS_Store|*.pdb" ExcludeFlags="6"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiActionTextComponent">
+    <ROW Action="WriteMachineConfig" Description="Writing the MiniVault machine configuration" Template="File: [1]"/>
+    <ROW Action="RunInit" Description="Initializing the MiniVault database" Template="[1]"/>
+    <ROW Action="AI_ConfigFailActions" Description="Configure service failure actions" DescriptionLocId="ActionText.Description.AI_ConfigFailActions" Template="Service: [1]" TemplateLocId="ActionText.Template.AI_ConfigFailActions"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiThemeComponent">
+    <ATTRIBUTE name="UsedTheme" value="classic"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.DictionaryComponent">
+    <ROW Path="&lt;AI_DICTS&gt;ui.ail"/>
+    <ROW Path="&lt;AI_DICTS&gt;ui_en.ail"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.FragmentComponent">
+    <!-- The standard dialog set. The four MiniVault configuration pages (SqlDlg, MasterKeyDlg,
+         TlsDlg, RecoveryDlg) are NOT authored here - see ../README.md, "Designer follow-ups". -->
+    <ROW Fragment="CommonUI.aip" Path="&lt;AI_FRAGS&gt;CommonUI.aip"/>
+    <ROW Fragment="FolderDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\FolderDlg.aip"/>
+    <ROW Fragment="LicenseAgreementDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\LicenseAgreementDlg.aip"/>
+    <ROW Fragment="MaintenanceTypeDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\MaintenanceTypeDlg.aip"/>
+    <ROW Fragment="MaintenanceWelcomeDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\MaintenanceWelcomeDlg.aip"/>
+    <ROW Fragment="SequenceDialogs.aip" Path="&lt;AI_THEMES&gt;classic\fragments\SequenceDialogs.aip"/>
+    <ROW Fragment="Sequences.aip" Path="&lt;AI_FRAGS&gt;Sequences.aip"/>
+    <ROW Fragment="StaticUIStrings.aip" Path="&lt;AI_FRAGS&gt;StaticUIStrings.aip"/>
+    <ROW Fragment="Themes.aip" Path="&lt;AI_FRAGS&gt;Themes.aip"/>
+    <ROW Fragment="UI.aip" Path="&lt;AI_THEMES&gt;classic\fragments\UI.aip"/>
+    <ROW Fragment="Validation.aip" Path="&lt;AI_FRAGS&gt;Validation.aip"/>
+    <ROW Fragment="VerifyRemoveDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\VerifyRemoveDlg.aip"/>
+    <ROW Fragment="VerifyRepairDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\VerifyRepairDlg.aip"/>
+    <ROW Fragment="WelcomeDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\WelcomeDlg.aip"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.BuildComponent">
+    <ROW BuildKey="DefaultBuild" BuildName="DefaultBuild" BuildOrder="1" BuildType="0" PackageFolder="Setup Files" PackageFileName="Karmasis.MiniVault" Languages="en" InstallationType="4" ExtUI="true" UseLargeSchema="true" MsiPackageType="x64"/>
+  </COMPONENT>
+</DOCUMENT>
