@@ -38,6 +38,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
         Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("ConnectionStrings:MiniVault", Db.ConnectionString);
+            b.UseSetting("Tls:AllowDevelopmentCertificate", "true");
             b.ConfigureTestServices(s => s.AddSingleton<IMasterKeyProvider>(Provider));
         });
 

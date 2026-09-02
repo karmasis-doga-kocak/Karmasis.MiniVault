@@ -191,9 +191,33 @@ Every command above writes an audit row with client id `cli`. The action names a
 
 Back up two things separately: the database (normal SQL Server backup) and the recovery material. Neither is useful alone.
 
-## HTTP API
+## TLS
 
-TLS/HTTPS configuration ships with the installer and container images (a later release); today the server listens on plain HTTP and is expected to sit behind a host that terminates TLS, or to be used only on a trusted local network, until that lands.
+The server listens on HTTPS only; there is no plain-HTTP endpoint. Configuration lives under `Tls`:
+
+| Key | Default | Notes |
+|---|---|---|
+| `Tls:Url` | `https://0.0.0.0:8200` | The single endpoint Kestrel binds. The host must be an IP literal — `0.0.0.0`, `::`, `localhost`, or a specific address — not a DNS name; Kestrel registers this endpoint explicitly, so `ASPNETCORE_URLS`/`--urls`/`Kestrel:Endpoints` are ignored. |
+| `Tls:Certificate:Path` / `Tls:Certificate:Password` | `null` | Load the server certificate from a PFX file. |
+| `Tls:Certificate:Thumbprint` | `null` | Load the server certificate (with its private key) from a certificate store instead of a file. |
+| `Tls:Certificate:StoreName` / `Tls:Certificate:StoreLocation` | `My` / `LocalMachine` | Where to look up `Thumbprint`. `StoreLocation` is `LocalMachine` or `CurrentUser`. |
+| `Tls:AllowDevelopmentCertificate` | `false` | Development only: use Kestrel's ASP.NET Core HTTPS development certificate instead of a configured one. |
+
+Set exactly one of `Tls:Certificate:Path` or `Tls:Certificate:Thumbprint` unless `Tls:AllowDevelopmentCertificate` is `true`. A misconfigured certificate (bad path, wrong password, missing thumbprint) fails startup immediately with a critical log entry, before the vault startup check runs.
+
+For local development, trust the ASP.NET Core development certificate once and let the server use it:
+
+```
+dotnet dev-certs https --trust
+```
+
+`appsettings.Development.json` already sets `Tls:AllowDevelopmentCertificate: true`. For a real install, use a PFX (`Tls:Certificate:Path`/`Password`) or import the certificate into a machine store and reference it by `Tls:Certificate:Thumbprint`.
+
+Self-signed installs: clients that talk to a MiniVault server with a self-signed or otherwise untrusted certificate must pin the certificate's thumbprint (see `docs/client.md`, TLS pinning) rather than disabling validation.
+
+Renewing a certificate: replace the PFX (or re-import into the store under the same or a new thumbprint), restart the MiniVault service, and — for self-signed installs — update the thumbprint pinned in every client's configuration.
+
+## HTTP API
 
 | Method | Path | Auth | Success | Error codes |
 |---|---|---|---|---|

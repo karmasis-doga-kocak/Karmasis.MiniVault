@@ -1,8 +1,8 @@
 # Karmasis.MiniVault
 
-Minimal on-premises secret store for Karmasis services. The master key lives only on the MiniVault host; services fetch secrets over HTTP (TLS is configured by the installer and container images, see docs/operations.md) with a client identity.
+Minimal on-premises secret store for Karmasis services. The master key lives only on the MiniVault host; services fetch secrets over HTTPS (see docs/operations.md, TLS) with a client identity.
 
-The server, the operator CLI, the HTTP API, and a .NET client library are implemented and tested; the Windows/Docker installer and TLS termination are still to come. See `docs/operations.md` for the CLI and the HTTP API reference.
+The server, the operator CLI, the HTTP API, and a .NET client library are implemented and tested; the Windows/Docker installer is still to come. See `docs/operations.md` for the CLI and the HTTP API reference.
 
 ## Client library
 

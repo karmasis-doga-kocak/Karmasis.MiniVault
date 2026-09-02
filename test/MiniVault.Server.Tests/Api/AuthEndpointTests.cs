@@ -85,6 +85,7 @@ public class AuthEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTestFi
         {
             b.UseSetting("ConnectionStrings:MiniVault", db.ConnectionString);
             b.UseSetting("Token:LoginRateLimitPerMinute", "5");
+            b.UseSetting("Tls:AllowDevelopmentCertificate", "true");
             b.ConfigureTestServices(s => s.AddSingleton<IMasterKeyProvider>(provider));
         });
 
@@ -138,6 +139,7 @@ public class AuthEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTestFi
         {
             b.UseSetting("ConnectionStrings:MiniVault", db.ConnectionString);
             b.UseSetting("Token:LifetimeMinutes", "1");
+            b.UseSetting("Tls:AllowDevelopmentCertificate", "true");
             b.ConfigureTestServices(s =>
             {
                 s.AddSingleton<IMasterKeyProvider>(provider);

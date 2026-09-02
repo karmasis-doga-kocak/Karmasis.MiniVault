@@ -19,6 +19,11 @@ builder.Configuration.AddMiniVaultConfiguration(args);
 builder.Host.UseWindowsService();
 builder.Services.AddMiniVaultCore(builder.Configuration);
 builder.Services.AddMiniVaultAuth(builder.Configuration);
+
+var tlsOptions = builder.Configuration.GetSection(TlsOptions.SectionName).Get<TlsOptions>() ?? new TlsOptions();
+KestrelConfiguration.Apply(builder, tlsOptions);
+builder.Services.Configure<TlsOptions>(builder.Configuration.GetSection(TlsOptions.SectionName));
+builder.Services.AddHostedService<TlsStartupCheck>();
 builder.Services.AddHostedService<VaultStartupCheck>();
 
 var app = builder.Build();

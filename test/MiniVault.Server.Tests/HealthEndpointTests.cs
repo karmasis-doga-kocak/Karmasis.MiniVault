@@ -29,6 +29,7 @@ public class HealthEndpointTests : IAsyncLifetime
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("ConnectionStrings:MiniVault", _db.ConnectionString);
+            b.UseSetting("Tls:AllowDevelopmentCertificate", "true");
             b.ConfigureTestServices(s => s.AddSingleton(provider));
         });
 
