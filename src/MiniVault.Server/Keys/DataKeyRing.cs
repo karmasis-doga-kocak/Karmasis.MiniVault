@@ -4,7 +4,8 @@ using MiniVault.Server.Vault;
 
 namespace MiniVault.Server.Keys;
 
-/// <summary>Unwrapped DEKs for the running server, loaded once at startup with the KEK from the provider.</summary>
+/// <summary>Unwrapped DEKs for the running server, loaded once at startup with the KEK from the provider.
+/// GetDek returns a copy; callers may clear it after use.</summary>
 public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider provider)
 {
     private readonly Dictionary<int, byte[]> _deks = new();
@@ -17,7 +18,7 @@ public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider 
     public byte[] GetDek(int version)
     {
         if (!IsLoaded) throw new VaultNotInitializedException();
-        return _deks.TryGetValue(version, out var dek) ? dek : throw new KeyNotFoundException($"No data key with version {version}.");
+        return _deks.TryGetValue(version, out var dek) ? (byte[])dek.Clone() : throw new KeyNotFoundException($"No data key with version {version}.");
     }
 
     public async Task LoadAsync(CancellationToken ct)

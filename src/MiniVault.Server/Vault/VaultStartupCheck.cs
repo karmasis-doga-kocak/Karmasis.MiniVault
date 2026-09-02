@@ -7,7 +7,15 @@ public sealed class VaultStartupCheck(DataKeyRing ring, ILogger<VaultStartupChec
 {
     public async Task StartAsync(CancellationToken ct)
     {
-        await ring.LoadAsync(ct);
+        try
+        {
+            await ring.LoadAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "MiniVault cannot start: {Reason}", ex.Message);
+            throw;
+        }
         logger.LogInformation("Vault unlocked. Active data key version {Version}.", ring.ActiveVersion);
     }
 

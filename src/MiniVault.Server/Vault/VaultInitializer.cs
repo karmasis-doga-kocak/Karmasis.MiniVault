@@ -22,29 +22,37 @@ public sealed class VaultInitializer(MiniVaultDbContext db, IMasterKeyProvider p
         var recovery = RecoveryMaterial.Generate(options.RecoveryMode, options.Shares, options.Threshold);
         var now = clock.GetUtcNow();
 
-        var dataKey = KeyHierarchy.CreateDataKey(1, master.Kek, recovery.Key, now);
-        dataKey.IsActive = true;
-
-        db.VaultMetadata.Add(new VaultMetadata
+        try
         {
-            Id = VaultMetadata.SingletonId,
-            RecoveryMode = recovery.Mode,
-            Shares = recovery.Shares,
-            Threshold = recovery.Threshold,
-            KekSalt = master.Salt,
-            KekIterations = master.Iterations,
-            RecoveryKeyWrappedByMaster = KeyWrapper.Wrap(recovery.Key, master.Kek),
-            InitializedAt = now,
-        });
-        db.DataKeys.Add(dataKey);
-        db.AuditLogs.Add(new AuditLog { Timestamp = now, ClientId = AuditClientId, Action = "init", Success = true, Detail = $"recovery={recovery.Mode}" });
-        await db.SaveChangesAsync(ct);
+            var dataKey = KeyHierarchy.CreateDataKey(1, master.Kek, recovery.Key, now);
+            dataKey.IsActive = true;
 
-        if (provider.CanStore)
-        {
-            provider.Store(master.Kek);
-            return new InitResult(recovery, true, null);
+            db.VaultMetadata.Add(new VaultMetadata
+            {
+                Id = VaultMetadata.SingletonId,
+                RecoveryMode = recovery.Mode,
+                Shares = recovery.Shares,
+                Threshold = recovery.Threshold,
+                KekSalt = master.Salt,
+                KekIterations = master.Iterations,
+                RecoveryKeyWrappedByMaster = KeyWrapper.Wrap(recovery.Key, master.Kek),
+                InitializedAt = now,
+            });
+            db.DataKeys.Add(dataKey);
+            db.AuditLogs.Add(new AuditLog { Timestamp = now, ClientId = AuditClientId, Action = "init", Success = true, Detail = $"recovery={recovery.Mode}" });
+
+            // Persist the KEK before the database row: a failed Store must not leave an initialized vault without a key.
+            // A key file left behind by a failed SaveChanges is harmless; the next init overwrites it.
+            string? kekBase64 = null;
+            if (provider.CanStore) provider.Store(master.Kek);
+            else kekBase64 = Convert.ToBase64String(master.Kek);
+
+            await db.SaveChangesAsync(ct);
+            return new InitResult(recovery, provider.CanStore, kekBase64);
         }
-        return new InitResult(recovery, false, Convert.ToBase64String(master.Kek));
+        finally
+        {
+            Array.Clear(master.Kek);
+        }
     }
 }

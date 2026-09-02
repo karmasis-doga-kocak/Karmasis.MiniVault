@@ -42,6 +42,23 @@ public class DataKeyRingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetDek_ReturnsCopy_CallerMutationDoesNotAffectRing()
+    {
+        var provider = new InMemoryMasterKeyProvider();
+        await using (var ctx = _db.CreateContext())
+            await new VaultInitializer(ctx, provider, TimeProvider.System).InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None);
+        await using var sp = BuildServices(provider);
+        var ring = sp.GetRequiredService<DataKeyRing>();
+        await ring.LoadAsync(CancellationToken.None);
+
+        var first = ring.GetDek(1);
+        Array.Clear(first);
+
+        ring.GetDek(1).ShouldNotBe(first);
+        ring.GetDek(1).ShouldBe(ring.ActiveDek);
+    }
+
+    [Fact]
     public async Task Load_OnUninitializedVault_Throws()
     {
         await using (var ctx = _db.CreateContext()) await ctx.Database.MigrateAsync();

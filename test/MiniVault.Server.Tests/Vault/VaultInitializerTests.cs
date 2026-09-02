@@ -85,6 +85,20 @@ public class VaultInitializerTests : IAsyncLifetime
         await Should.ThrowAsync<VaultAlreadyInitializedException>(() => sut.InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Initialize_WhenStoreFails_DoesNotMarkVaultInitialized()
+    {
+        var provider = new ThrowingStoreProvider();
+        await using var ctx = _db.CreateContext();
+        var sut = new VaultInitializer(ctx, provider, _clock);
+
+        await Should.ThrowAsync<IOException>(() => sut.InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None));
+
+        await using var check = _db.CreateContext();
+        (await check.VaultMetadata.AnyAsync()).ShouldBeFalse();
+        (await check.DataKeys.AnyAsync()).ShouldBeFalse();
+    }
+
     private static byte[] KeyWrapper_Unwrap(byte[] wrapped, byte[] kek) => Karmasis.Cryptography.Keys.KeyWrapper.Unwrap(wrapped, kek);
 
     private sealed class NonStoringProvider : IMasterKeyProvider
@@ -94,5 +108,14 @@ public class VaultInitializerTests : IAsyncLifetime
         public bool Exists() => false;
         public byte[] GetKek() => throw new MasterKeyUnavailableException("none");
         public void Store(byte[] kek) => throw new NotSupportedException();
+    }
+
+    private sealed class ThrowingStoreProvider : IMasterKeyProvider
+    {
+        public string Name => "ThrowingStore";
+        public bool CanStore => true;
+        public bool Exists() => false;
+        public byte[] GetKek() => throw new MasterKeyUnavailableException("none");
+        public void Store(byte[] kek) => throw new IOException("disk full");
     }
 }
