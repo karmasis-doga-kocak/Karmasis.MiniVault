@@ -27,13 +27,18 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$LocalFeed = (Join-Path $PSScriptRoot "..\..\..\local-nuget"),
+    # Resolved below: $PSScriptRoot is empty inside the param block when the script is started with
+    # `powershell -File <relative path>` on Windows PowerShell 5.1.
+    [string]$LocalFeed = "",
     [string]$ImageTag = "karmasis/minivault:dev"
 )
 
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $LocalFeed) { $LocalFeed = Join-Path $scriptDir "..\..\..\local-nuget" }
+
+$repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 $packagesDir = Join-Path $repoRoot "packages"
 
 $resolvedFeed = Resolve-Path -LiteralPath $LocalFeed -ErrorAction Stop
