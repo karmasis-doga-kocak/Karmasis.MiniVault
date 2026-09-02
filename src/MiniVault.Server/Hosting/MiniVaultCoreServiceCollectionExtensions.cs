@@ -1,3 +1,5 @@
+using MiniVault.Server.Audit;
+using MiniVault.Server.Auth;
 using MiniVault.Server.Data;
 using MiniVault.Server.Keys;
 using MiniVault.Server.Secrets;
@@ -17,6 +19,9 @@ public static class MiniVaultCoreServiceCollectionExtensions
         services.AddScoped<VaultRecovery>();
         services.AddSingleton<DataKeyRing>();
         services.AddSingleton<SecretCipher>();
+        services.AddScoped<SecretService>();
+        services.AddScoped<AuditWriter>();
+        services.AddScoped<ClientDirectory>();
         return services;
     }
 }
