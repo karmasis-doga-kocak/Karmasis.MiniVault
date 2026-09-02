@@ -172,4 +172,48 @@ public class DiskCacheTests : IDisposable
         loaded.Count.ShouldBe(1);
         loaded[0].Name.ShouldBe("x");
     }
+
+    [Fact]
+    public async Task TwoInstances_SameFile_ParallelSaves_DoNotThrow()
+    {
+        var a = new DiskCache(_dir, "client", "shared-secret", null);
+        var b = new DiskCache(_dir, "client", "shared-secret", null);
+
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+        var tasks = Enumerable.Range(0, 10).SelectMany(i => new[]
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    a.Save(new[] { Make("x", "a-value-" + i, null, i, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow) });
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }),
+            Task.Run(() =>
+            {
+                try
+                {
+                    b.Save(new[] { Make("y", "b-value-" + i, null, i, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow) });
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }),
+        }).ToArray();
+
+        await Task.WhenAll(tasks);
+
+        exceptions.ShouldBeEmpty();
+
+        var reader = new DiskCache(_dir, "client", "shared-secret", null);
+        var loaded = reader.Load();
+
+        loaded.ShouldNotBeEmpty();
+        loaded.ShouldAllBe(e => e.Name == "x" || e.Name == "y");
+    }
 }

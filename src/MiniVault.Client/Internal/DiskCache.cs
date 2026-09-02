@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -25,7 +26,10 @@ internal sealed class DiskCache
     private readonly string _clientId;
     private readonly string _clientSecret;
     private readonly Action<string>? _log;
-    private readonly object _saveLock = new object();
+
+    // Per-file rather than per-instance so two DiskCache instances pointed at the same file (e.g. distinct
+    // client instances sharing a cache directory) don't race each other's temp-file-plus-move sequence.
+    private static readonly ConcurrentDictionary<string, object> FileLocks = new();
 
     public DiskCache(string directory, string clientId, string clientSecret, Action<string>? log)
     {
@@ -121,22 +125,27 @@ internal sealed class DiskCache
             }).ToList(),
         };
 
-        var json = JsonSerializer.Serialize(dto, JsonOptions);
-        var plain = Encoding.UTF8.GetBytes(json);
+        // The serialized JSON string itself cannot be cleared (strings are immutable in .NET), so it is built
+        // and encoded to bytes in a single expression to keep its lifetime - and thus its exposure - as short
+        // as possible; the byte[] we get from encoding it, unlike the string, can and is cleared below.
+        byte[]? plain = null;
 
         var key = DeriveKey();
         byte[] blob;
         try
         {
+            plain = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(dto, JsonOptions));
             var aad = Encoding.UTF8.GetBytes(_clientId);
             blob = AeadCipher.Encrypt(plain, key, aad);
         }
         finally
         {
             Array.Clear(key, 0, key.Length);
+            if (plain is not null) Array.Clear(plain, 0, plain.Length);
         }
 
-        lock (_saveLock)
+        var fullPath = Path.GetFullPath(FilePath);
+        lock (FileLocks.GetOrAdd(fullPath, _ => new object()))
         {
             Directory.CreateDirectory(_directory);
 
