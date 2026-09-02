@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
+using System.Security.Principal;
 using MiniVault.Server.Keys;
 
 namespace MiniVault.Server.Tests.Keys;
@@ -118,4 +119,64 @@ public class DpapiMasterKeyProviderTests : IDisposable
 
         new DirectoryInfo(created).GetAccessControl().AreAccessRulesProtected.ShouldBeTrue();
     }
+
+    /// <summary>install.ps1 grants a custom -ServiceAccount read access to the config directory. Store must
+    /// leave that grant alone and carry it onto masterkey.bin, or the service cannot read its own key.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Store_KeepsExplicitDirectoryGrant_AndPropagatesItToTheKeyFile()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var serviceAccount = new SecurityIdentifier(WellKnownSidType.NetworkServiceSid, null);
+        var dir = Directory.CreateDirectory(_dir);
+        GrantReadExecute(dir, serviceAccount);
+
+        var path = Path.Combine(_dir, "masterkey.bin");
+        new DpapiMasterKeyProvider(path).Store(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
+
+        AllowRules(new DirectoryInfo(_dir).GetAccessControl())
+            .ShouldContain(r => r.IdentityReference.Equals(serviceAccount));
+
+        var fileSecurity = new FileInfo(path).GetAccessControl();
+        fileSecurity.AreAccessRulesProtected.ShouldBeTrue();
+        AllowRules(fileSecurity)
+            .ShouldContain(r => r.IdentityReference.Equals(serviceAccount) && r.FileSystemRights.HasFlag(FileSystemRights.Read));
+    }
+
+    /// <summary>Re-protecting the machine config directory (the only directory Store re-ACLs when it already
+    /// exists) must merge the explicit grants that are on it and drop only the inherited ACEs.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void CreateOwnerOnlyDirectory_MergesExplicitGrants_AndStaysProtected()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var serviceAccount = new SecurityIdentifier(WellKnownSidType.NetworkServiceSid, null);
+        var dir = Directory.CreateDirectory(Path.Combine(_dir, "config"));
+        GrantReadExecute(dir, serviceAccount);
+
+        dir.SetAccessControl(WindowsFileAcl.CreateOwnerOnlyDirectory(dir));
+
+        var security = new DirectoryInfo(dir.FullName).GetAccessControl();
+        security.AreAccessRulesProtected.ShouldBeTrue();
+        var rules = AllowRules(security);
+        rules.ShouldContain(r => r.IdentityReference.Equals(serviceAccount) && r.FileSystemRights.HasFlag(FileSystemRights.ReadAndExecute));
+        rules.ShouldContain(r => ((SecurityIdentifier)r.IdentityReference).IsWellKnown(WellKnownSidType.LocalSystemSid));
+        rules.ShouldNotContain(r => ((SecurityIdentifier)r.IdentityReference).IsWellKnown(WellKnownSidType.BuiltinUsersSid));
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void GrantReadExecute(DirectoryInfo dir, SecurityIdentifier identity)
+    {
+        var security = dir.GetAccessControl();
+        security.AddAccessRule(new FileSystemAccessRule(identity, FileSystemRights.ReadAndExecute,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        dir.SetAccessControl(security);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static List<FileSystemAccessRule> AllowRules(FileSystemSecurity security) =>
+        security.GetAccessRules(true, true, typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()
+            .Where(r => r.AccessControlType == AccessControlType.Allow)
+            .ToList();
 }

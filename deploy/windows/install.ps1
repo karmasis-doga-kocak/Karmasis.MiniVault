@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Installs the Karmasis MiniVault server as a Windows service.
@@ -5,16 +6,17 @@
 .DESCRIPTION
     1. Copies the publish output into the install directory and creates the ProgramData folder.
     2. Writes the machine-wide configuration file (connection string, master key provider, TLS).
-    3. Locks down the ProgramData folder with a protected ACL.
+    3. Locks down the ProgramData folder with a protected ACL (well-known SIDs, not localized names).
     4. Runs 'minivault.exe init' and requires the operator to confirm the recovery material is saved.
-    5. Registers and starts the Windows service.
+    5. Prints the SQL grant script, then registers (and, unless -SkipServiceStart, starts) the service.
     6. Waits for the health endpoint to respond.
 
-    Must be run from an elevated (Administrator) PowerShell session, except with -WhatIfMode, which
-    prints the plan and exits without making any changes (and does not require elevation).
+    Runs on Windows PowerShell 5.1 and later. Must be run from an elevated (Administrator) PowerShell
+    session, except with -WhatIfMode, which prints the plan and exits without making any changes (and
+    does not require elevation).
 
 .EXAMPLE
-    .\install.ps1 -SourceDir C:\publish\minivault -ConnectionString "Server=sql01;Database=MiniVault;Integrated Security=true" -CertificatePath C:\certs\minivault.pfx -CertificatePassword (Read-Host -AsSecureString | ConvertFrom-SecureString)
+    .\install.ps1 -SourceDir C:\publish\minivault -ConnectionString "Server=sql01;Database=MiniVault;Integrated Security=true" -CertificatePath C:\certs\minivault.pfx -CertificatePassword (Read-Host)
 
 .EXAMPLE
     .\install.ps1 -WhatIfMode -SourceDir C:\publish\minivault -ConnectionString "Server=sql01;Database=MiniVault;Integrated Security=true" -CertificateThumbprint 0123456789ABCDEF0123456789ABCDEF01234567
@@ -52,6 +54,10 @@ param(
     # Skip the "type SAVED to continue" prompt after 'minivault.exe init' (prints a warning instead).
     [switch]$NonInteractive,
 
+    # Register the service but do not start it, so the SQL grant printed before Step 5 can be applied
+    # first. Start it afterwards with: sc.exe start <ServiceName>
+    [switch]$SkipServiceStart,
+
     # Print the install plan and exit 0 without making any changes. Does not require elevation.
     [switch]$WhatIfMode
 )
@@ -60,9 +66,121 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+<#
+Runs a native executable and returns its exit code plus both captured streams. Native commands do not
+honour $ErrorActionPreference = 'Stop', and piping their stderr through `2>&1` under 'Stop' turns every
+stderr line into a NativeCommandError, so the process is launched detached with both streams redirected
+to temp files instead. The temp files are always removed.
+#>
+function Invoke-NativeProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @()
+    )
+
+    $stdOutFile = [System.IO.Path]::GetTempFileName()
+    $stdErrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        # Start-Process joins the array with spaces, so anything containing whitespace must be quoted.
+        $quoted = @($ArgumentList | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
+        $process = Start-Process -FilePath $FilePath -ArgumentList $quoted -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput $stdOutFile -RedirectStandardError $stdErrFile
+
+        $stdOut = ''
+        $stdErr = ''
+        if (Test-Path $stdOutFile) { $stdOut = [string](Get-Content -Path $stdOutFile -Raw) }
+        if (Test-Path $stdErrFile) { $stdErr = [string](Get-Content -Path $stdErrFile -Raw) }
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            StdOut   = $stdOut
+            StdErr   = $stdErr
+        }
+    } finally {
+        Remove-Item -Path $stdOutFile, $stdErrFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+<#
+Polls the health endpoint until it answers 200 or the deadline passes. Invoke-WebRequest -SkipCertificateCheck
+does not exist on Windows PowerShell 5.1, so this uses HttpClient with a permissive certificate callback
+(the installer talks to localhost over a certificate that is very often self-signed at this point).
+#>
+function Wait-ForHealthEndpoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$HealthUrl,
+        [int]$TimeoutSeconds = 30,
+        [int]$AttemptTimeoutSeconds = 5
+    )
+
+    if ($PSVersionTable.PSVersion.Major -lt 6) { Add-Type -AssemblyName System.Net.Http }
+
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.ServerCertificateCustomValidationCallback = { $true }
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    try {
+        $client.Timeout = [TimeSpan]::FromSeconds($AttemptTimeoutSeconds)
+        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        $lastError = 'no attempt completed'
+        while ((Get-Date) -lt $deadline) {
+            try {
+                $response = $client.GetAsync($HealthUrl).GetAwaiter().GetResult()
+                try {
+                    if ([int]$response.StatusCode -eq 200) {
+                        return [pscustomobject]@{ Healthy = $true; LastError = $null }
+                    }
+                    $lastError = "HTTP $([int]$response.StatusCode)"
+                } finally {
+                    $response.Dispose()
+                }
+            } catch {
+                $lastError = $_.Exception.GetBaseException().Message
+            }
+            Start-Sleep -Seconds 2
+        }
+        return [pscustomobject]@{ Healthy = $false; LastError = $lastError }
+    } finally {
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+}
+
+# ---------------------------------------------------------------------------
 # Parameter validation (runs before the elevation check so -WhatIfMode and CI
 # smoke tests get a clean non-zero exit + message without needing to elevate).
 # ---------------------------------------------------------------------------
+
+# Well-known service identities that need no password. LocalSystem is spelled several ways by sc.exe/services.msc.
+$localSystemAccounts    = @('LocalSystem', 'NT AUTHORITY\SYSTEM', '.\LocalSystem')
+$networkServiceAccounts = @('NetworkService', 'NT AUTHORITY\NetworkService')
+$localServiceAccounts   = @('LocalService', 'NT AUTHORITY\LocalService')
+$passwordlessAccounts   = $localSystemAccounts + $networkServiceAccounts + $localServiceAccounts
+
+$isLocalSystem = $localSystemAccounts -contains $ServiceAccount
+$serviceAccountNeedsPassword = -not ($passwordlessAccounts -contains $ServiceAccount)
+
+# icacls resolves localized group names, so grant by SID: SYSTEM, BUILTIN\Administrators, and the
+# service account when it is not LocalSystem. Read/execute is enough for the service: the config and
+# key file are only written by 'init'/'recover', which run as the operator.
+$serviceAccountSid = $null
+if (-not $isLocalSystem) {
+    if ($networkServiceAccounts -contains $ServiceAccount) {
+        $serviceAccountSid = '*S-1-5-20'
+    } elseif ($localServiceAccounts -contains $ServiceAccount) {
+        $serviceAccountSid = '*S-1-5-19'
+    } else {
+        $serviceAccountSid = $ServiceAccount
+    }
+}
+
 $validationErrors = [System.Collections.Generic.List[string]]::new()
 
 if ([string]::IsNullOrWhiteSpace($ConnectionString)) {
@@ -78,6 +196,20 @@ if ($hasCertPath -and $hasCertThumbprint) {
     $validationErrors.Add('Specify only one of -CertificatePath or -CertificateThumbprint, not both.')
 } elseif (-not $hasCertPath -and -not $hasCertThumbprint) {
     $validationErrors.Add('Specify exactly one of -CertificatePath (with -CertificatePassword) or -CertificateThumbprint.')
+}
+
+if ($hasCertThumbprint) {
+    # certmgr.msc copies the thumbprint with spaces and a leading left-to-right mark; normalize both away.
+    $normalizedThumbprint = ($CertificateThumbprint -replace '[\s\u200e\u200f:-]', '').ToUpperInvariant()
+    if ($normalizedThumbprint -notmatch '^[0-9A-F]{40}$') {
+        $validationErrors.Add("-CertificateThumbprint '$CertificateThumbprint' is not a SHA-1 certificate thumbprint: it must normalize to exactly 40 hexadecimal characters (got $($normalizedThumbprint.Length)).")
+    } else {
+        $CertificateThumbprint = $normalizedThumbprint
+    }
+}
+
+if ($serviceAccountNeedsPassword -and [string]::IsNullOrWhiteSpace($ServiceAccountPassword)) {
+    $validationErrors.Add("-ServiceAccountPassword is required when -ServiceAccount ('$ServiceAccount') is not LocalSystem, NetworkService or LocalService.")
 }
 
 if ($Recovery -eq 'shamir') {
@@ -99,12 +231,6 @@ if ($validationErrors.Count -gt 0) {
     exit 1
 }
 
-function Test-IsAdministrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-}
-
 # #Requires -RunAsAdministrator cannot be made conditional, and -WhatIfMode must work unelevated
 # (it is also how InstallScriptTests exercises this script in CI). Enforce elevation manually instead.
 if (-not $WhatIfMode -and -not (Test-IsAdministrator)) {
@@ -115,8 +241,6 @@ if (-not $WhatIfMode -and -not (Test-IsAdministrator)) {
 $port = $parsedUrl.Port
 $programDataDir = Join-Path $env:ProgramData 'MiniVault'
 $machineConfigPath = Join-Path $programDataDir 'appsettings.json'
-$wellKnownServiceAccounts = @('LocalSystem', 'NetworkService', 'LocalService', 'NT AUTHORITY\LocalService', 'NT AUTHORITY\NetworkService')
-$serviceAccountNeedsPassword = -not ($wellKnownServiceAccounts -contains $ServiceAccount)
 
 Write-Host "MiniVault install plan"
 Write-Host "  Service name  : $ServiceName"
@@ -126,6 +250,11 @@ Write-Host "  ProgramData   : $programDataDir"
 Write-Host "  Service acct  : $ServiceAccount"
 Write-Host "  URL           : $Url"
 Write-Host ''
+
+if ($hasCertPath -and -not [string]::IsNullOrWhiteSpace($CertificatePassword)) {
+    Write-Host "Warning: the PFX password is written in plain text to $machineConfigPath (Tls:Certificate:Password). That file is ACL-protected in Step 3 to SYSTEM, Administrators and the service account, but it is still a secret at rest on this host. Importing the certificate into LocalMachine\My and using -CertificateThumbprint avoids storing it." -ForegroundColor Yellow
+    Write-Host ''
+}
 
 # ---------------------------------------------------------------------------
 # Step 1: copy the publish output, create the ProgramData folder.
@@ -182,13 +311,10 @@ if (-not $WhatIfMode) {
 # ---------------------------------------------------------------------------
 # Step 3: lock down %ProgramData%\MiniVault.
 # ---------------------------------------------------------------------------
-$aclDescription = 'SYSTEM, Administrators'
-if ($serviceAccountNeedsPassword) { $aclDescription += ", and $ServiceAccount" }
-Write-Host "Step 3: Apply a protected ACL to $programDataDir ($aclDescription)."
+$grants = @('*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
+if ($null -ne $serviceAccountSid) { $grants += "$($serviceAccountSid):(OI)(CI)RX" }
+Write-Host "Step 3: Apply a protected ACL to $programDataDir (icacls /inheritance:r /grant:r $($grants -join ' '))."
 if (-not $WhatIfMode) {
-    $grants = @('SYSTEM:(OI)(CI)F', 'Administrators:(OI)(CI)F')
-    if ($serviceAccountNeedsPassword) { $grants += "$($ServiceAccount):(OI)(CI)F" }
-
     & icacls.exe $programDataDir /inheritance:r /grant:r @grants | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "icacls failed to protect '$programDataDir' (exit code $LASTEXITCODE)."
@@ -208,11 +334,10 @@ if (-not $WhatIfMode) {
     if ($Recovery -eq 'shamir') { $initArgs += @('--shares', "$Shares", '--threshold', "$Threshold") }
     if (-not [string]::IsNullOrWhiteSpace($MasterKeyPassword)) { $initArgs += @('--master-key', $MasterKeyPassword) }
 
-    $initOutput = & $exePath @initArgs 2>&1
-    $initExitCode = $LASTEXITCODE
-    $initOutput | ForEach-Object { Write-Host $_ }
-    if ($initExitCode -ne 0) {
-        throw "minivault.exe init failed with exit code $initExitCode."
+    $init = Invoke-NativeProcess -FilePath $exePath -ArgumentList $initArgs
+    if (-not [string]::IsNullOrWhiteSpace($init.StdOut)) { Write-Host $init.StdOut }
+    if ($init.ExitCode -ne 0) {
+        throw "minivault.exe init failed with exit code $($init.ExitCode). $($init.StdErr)".Trim()
     }
 
     if ($NonInteractive) {
@@ -228,28 +353,57 @@ if (-not $WhatIfMode) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5: register and start the Windows service.
+# The SQL grant comes before the service is created/started on purpose: the service cannot reach the
+# database without it, so the operator gets the script while there is still time to run it (and can
+# combine it with -SkipServiceStart).
 # ---------------------------------------------------------------------------
-Write-Host "Step 5: Register and start the '$ServiceName' Windows service."
+$loginName = if ($isLocalSystem) { 'NT AUTHORITY\SYSTEM' } else { $ServiceAccount }
+$sqlScript = @"
+-- Run on the target SQL Server instance so the service account can reach the MiniVault database (Windows Authentication):
+CREATE LOGIN [$loginName] FROM WINDOWS;
+CREATE USER [$loginName] FOR LOGIN [$loginName];
+ALTER ROLE db_owner ADD MEMBER [$loginName];
+"@
+Write-Host ''
+Write-Host 'Grant the service account access to the MiniVault database before the service can start successfully:'
+Write-Host $sqlScript
+Write-Host ''
+
+# ---------------------------------------------------------------------------
+# Step 5: register (and start) the Windows service.
+# ---------------------------------------------------------------------------
+$startDescription = if ($SkipServiceStart) { 'register (not start, -SkipServiceStart)' } else { 'register and start' }
+Write-Host "Step 5: $startDescription the '$ServiceName' Windows service."
 if (-not $WhatIfMode) {
     $exePath = Join-Path $InstallDir 'minivault.exe'
     $binPath = "`"$exePath`""
 
     $scCreateArgs = @('create', $ServiceName, 'binPath=', $binPath, 'start=', 'auto', 'obj=', $ServiceAccount)
-    if ($serviceAccountNeedsPassword -and -not [string]::IsNullOrWhiteSpace($ServiceAccountPassword)) {
+    if ($serviceAccountNeedsPassword) {
         $scCreateArgs += @('password=', $ServiceAccountPassword)
     }
-    & sc.exe @scCreateArgs | Out-Null
+    $scOutput = & sc.exe @scCreateArgs
     if ($LASTEXITCODE -ne 0) {
-        throw "sc.exe create failed for service '$ServiceName' (exit code $LASTEXITCODE)."
+        throw "sc.exe create failed for service '$ServiceName' (exit code $LASTEXITCODE): $($scOutput -join ' ')"
     }
 
-    & sc.exe description $ServiceName 'Karmasis MiniVault secret vault server.' | Out-Null
-    & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
-
-    & sc.exe start $ServiceName | Out-Null
+    $scOutput = & sc.exe description $ServiceName 'Karmasis MiniVault secret vault server.'
     if ($LASTEXITCODE -ne 0) {
-        throw "sc.exe start failed for service '$ServiceName' (exit code $LASTEXITCODE)."
+        throw "sc.exe description failed for service '$ServiceName' (exit code $LASTEXITCODE): $($scOutput -join ' ')"
+    }
+
+    $scOutput = & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/5000/restart/5000
+    if ($LASTEXITCODE -ne 0) {
+        throw "sc.exe failure failed for service '$ServiceName' (exit code $LASTEXITCODE): $($scOutput -join ' ')"
+    }
+
+    if ($SkipServiceStart) {
+        Write-Host "Service '$ServiceName' created but not started (-SkipServiceStart). Run the SQL grant above, then: sc.exe start $ServiceName"
+    } else {
+        $scOutput = & sc.exe start $ServiceName
+        if ($LASTEXITCODE -ne 0) {
+            throw "sc.exe start failed for service '$ServiceName' (exit code $LASTEXITCODE): $($scOutput -join ' ')"
+        }
     }
 }
 
@@ -257,24 +411,17 @@ if (-not $WhatIfMode) {
 # Step 6: wait for the health endpoint.
 # ---------------------------------------------------------------------------
 $healthUrl = "https://localhost:$port/v1/health"
-Write-Host "Step 6: Wait up to 30 seconds for $healthUrl."
-if (-not $WhatIfMode) {
-    $deadline = (Get-Date).AddSeconds(30)
-    $healthy = $false
-    $lastError = $null
-    while ((Get-Date) -lt $deadline) {
-        try {
-            $response = Invoke-WebRequest -Uri $healthUrl -SkipCertificateCheck -UseBasicParsing -TimeoutSec 5
-            if ($response.StatusCode -eq 200) { $healthy = $true; break }
-        } catch {
-            $lastError = $_
-        }
-        Start-Sleep -Seconds 2
-    }
-    if ($healthy) {
+if ($SkipServiceStart) {
+    Write-Host "Step 6: Skipped - the service was not started. After 'sc.exe start $ServiceName', check $healthUrl."
+} else {
+    Write-Host "Step 6: Wait up to 30 seconds for $healthUrl."
+}
+if (-not $WhatIfMode -and -not $SkipServiceStart) {
+    $health = Wait-ForHealthEndpoint -HealthUrl $healthUrl -TimeoutSeconds 30 -AttemptTimeoutSeconds 5
+    if ($health.Healthy) {
         Write-Host "Health check succeeded: $healthUrl responded 200 OK."
     } else {
-        Write-Warning "Health check did not succeed within 30 seconds: $healthUrl. Last error: $lastError"
+        Write-Warning "Health check did not succeed within 30 seconds: $healthUrl. Last error: $($health.LastError)"
     }
 }
 
@@ -284,16 +431,6 @@ if ($WhatIfMode) {
     exit 0
 }
 
-$loginName = if ($ServiceAccount -eq 'LocalSystem') { 'NT AUTHORITY\SYSTEM' } else { $ServiceAccount }
-$sqlScript = @"
--- Run on the target SQL Server instance so the service account can reach the MiniVault database (Windows Authentication):
-CREATE LOGIN [$loginName] FROM WINDOWS;
-CREATE USER [$loginName] FOR LOGIN [$loginName];
-ALTER ROLE db_owner ADD MEMBER [$loginName];
-"@
-Write-Host ''
-Write-Host 'Reminder: grant the service account access to the MiniVault database before the service can start successfully:'
-Write-Host $sqlScript
 Write-Host ''
 Write-Host "MiniVault installed and service '$ServiceName' registered."
 exit 0

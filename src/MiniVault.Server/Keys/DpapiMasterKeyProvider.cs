@@ -56,14 +56,22 @@ public sealed class DpapiMasterKeyProvider : IMasterKeyProvider
         // Only reset the ACL for a directory we created ourselves, or for the well-known machine
         // config directory. A pre-existing directory the caller pointed MasterKey:Path at (even one
         // that happens to be named "MiniVault") must keep whatever ACL it already had.
+        // When we do re-protect the machine config directory, the explicit grants already on it are
+        // merged in: install.ps1 grants a custom -ServiceAccount there, and stripping that would leave
+        // the service unable to read its own configuration and key file.
         if (ShouldProtectDirectory(dirInfo, created: !directoryExisted))
-            dirInfo.SetAccessControl(WindowsFileAcl.CreateOwnerOnlyDirectory());
+        {
+            dirInfo.SetAccessControl(WindowsFileAcl.CreateOwnerOnlyDirectory(directoryExisted ? dirInfo : null));
+            dirInfo.Refresh();
+        }
 
         var protectedBytes = ProtectedData.Protect(kek, Entropy, DataProtectionScope.LocalMachine);
         var temp = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            var fileSecurity = WindowsFileAcl.CreateOwnerOnly();
+            // Carry the directory's explicit grants (read-only) onto the key file itself, so a service
+            // account granted access to the directory can actually open masterkey.bin.
+            var fileSecurity = WindowsFileAcl.CreateOwnerOnly(dirInfo);
             using (var stream = new FileInfo(temp).Create(FileMode.CreateNew, FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.None, fileSecurity))
                 stream.Write(protectedBytes, 0, protectedBytes.Length);
             File.Move(temp, FilePath, overwrite: true);

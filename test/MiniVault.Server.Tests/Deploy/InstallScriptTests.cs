@@ -69,6 +69,67 @@ public class InstallScriptTests
         result.ExitCode.ShouldNotBe(0);
     }
 
+    [Fact]
+    public void ServiceAccount_IsGrantedByWellKnownSid_NotLocalizedName()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var sourceDir = Path.Combine(Path.GetTempPath(), "minivault-src-" + Guid.NewGuid());
+        var installDir = Path.Combine(Path.GetTempPath(), "minivault-install-" + Guid.NewGuid());
+
+        var result = RunScript(
+            "-WhatIfMode",
+            "-ConnectionString", "Server=x;Database=y;Integrated Security=true",
+            "-CertificateThumbprint", "0123456789ABCDEF0123456789ABCDEF01234567",
+            "-ServiceAccount", @"NT AUTHORITY\NetworkService",
+            "-SourceDir", sourceDir,
+            "-InstallDir", installDir);
+
+        result.ExitCode.ShouldBe(0, result.CombinedOutput);
+        result.CombinedOutput.ShouldContain("S-1-5-18");        // SYSTEM
+        result.CombinedOutput.ShouldContain("S-1-5-32-544");    // BUILTIN\Administrators
+        result.CombinedOutput.ShouldContain("S-1-5-20");        // NETWORK SERVICE, granted read/execute
+    }
+
+    [Fact]
+    public void ShortCertificateThumbprint_FailsWithNonZeroExit_AndMentionsThumbprint()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var sourceDir = Path.Combine(Path.GetTempPath(), "minivault-src-" + Guid.NewGuid());
+        var installDir = Path.Combine(Path.GetTempPath(), "minivault-install-" + Guid.NewGuid());
+
+        var result = RunScript(
+            "-WhatIfMode",
+            "-ConnectionString", "Server=x;Database=y;Integrated Security=true",
+            "-CertificateThumbprint", "0123456789ABCDEF0123456789ABCDEF0123456", // 39 characters
+            "-SourceDir", sourceDir,
+            "-InstallDir", installDir);
+
+        result.ExitCode.ShouldNotBe(0);
+        result.CombinedOutput.ShouldContain("Thumbprint");
+    }
+
+    [Fact]
+    public void CustomServiceAccountWithoutPassword_FailsWithNonZeroExit_AndMentionsServiceAccountPassword()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var sourceDir = Path.Combine(Path.GetTempPath(), "minivault-src-" + Guid.NewGuid());
+        var installDir = Path.Combine(Path.GetTempPath(), "minivault-install-" + Guid.NewGuid());
+
+        var result = RunScript(
+            "-WhatIfMode",
+            "-ConnectionString", "Server=x;Database=y;Integrated Security=true",
+            "-CertificateThumbprint", "0123456789ABCDEF0123456789ABCDEF01234567",
+            "-ServiceAccount", @"CORP\svc-minivault",
+            "-SourceDir", sourceDir,
+            "-InstallDir", installDir);
+
+        result.ExitCode.ShouldNotBe(0);
+        result.CombinedOutput.ShouldContain("ServiceAccountPassword");
+    }
+
     private static (int ExitCode, string CombinedOutput) RunScript(params string[] scriptArgs)
     {
         var psi = new ProcessStartInfo

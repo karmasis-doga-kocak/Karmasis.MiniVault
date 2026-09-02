@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Uninstalls the Karmasis MiniVault Windows service.
@@ -5,10 +6,13 @@
 .DESCRIPTION
     Stops and deletes the Windows service, then removes the install directory.
     %ProgramData%\MiniVault (which holds the DPAPI-protected master key) is left untouched
-    unless -PurgeData is passed.
+    unless -PurgeData is passed. -PurgeData prints a red warning and asks the operator to type PURGE;
+    pass -Force to skip that prompt.
+
+    Runs on Windows PowerShell 5.1 and later, from an elevated session.
 
 .EXAMPLE
-    .\uninstall.ps1 -ServiceName MiniVaultSmoke -InstallDir C:\Temp\MiniVaultSmoke -PurgeData
+    .\uninstall.ps1 -ServiceName MiniVaultSmoke -InstallDir C:\Temp\MiniVaultSmoke -PurgeData -Force
 #>
 [CmdletBinding()]
 param(
@@ -17,7 +21,11 @@ param(
 
     # Also delete %ProgramData%\MiniVault. This destroys the DPAPI master key: without a
     # separately stored recovery key, every secret in the database becomes unrecoverable.
-    [switch]$PurgeData
+    # Prompts for confirmation unless -Force is also passed.
+    [switch]$PurgeData,
+
+    # Skip the interactive PURGE confirmation for -PurgeData (for unattended teardown).
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -68,7 +76,17 @@ if (Test-Path $InstallDir) {
 
 if ($PurgeData) {
     Write-Host ''
-    Write-Warning "PURGING $programDataDir. This deletes the DPAPI master key. Every secret in the MiniVault database becomes permanently unrecoverable unless the recovery material was saved separately and offline."
+    Write-Host "DESTRUCTIVE: -PurgeData deletes $programDataDir, including the DPAPI master key." -ForegroundColor Red
+    Write-Host "Every secret in the MiniVault database becomes permanently unrecoverable unless the recovery material was saved separately and offline." -ForegroundColor Red
+    if (-not $Force) {
+        $confirmation = Read-Host "Type PURGE to confirm deleting $programDataDir (anything else aborts)"
+        if ($confirmation -ne 'PURGE') {
+            Write-Host "Purge not confirmed; keeping $programDataDir."
+            Write-Host ''
+            Write-Host "MiniVault service '$ServiceName' uninstalled."
+            exit 0
+        }
+    }
     if (Test-Path $programDataDir) {
         Remove-Item -Path $programDataDir -Recurse -Force
         Write-Host "Removed $programDataDir."

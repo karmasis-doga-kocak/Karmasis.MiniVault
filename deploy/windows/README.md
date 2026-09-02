@@ -16,25 +16,36 @@ publish output).
 
 ## 2. Install
 
-Run `install.ps1` from an **elevated** PowerShell session. It:
+Run `install.ps1` from an **elevated** PowerShell session (Windows PowerShell 5.1 or later; both scripts
+declare `#Requires -Version 5.1`). It:
 
 1. Copies the publish output into `-InstallDir` (`robocopy /MIR`) and creates `%ProgramData%\MiniVault`.
 2. Writes `%ProgramData%\MiniVault\appsettings.json` with the connection string, `MasterKey:Provider=Dpapi`
    and the `Tls` section built from `-Url` and the certificate parameters.
-3. Locks `%ProgramData%\MiniVault` down with a protected ACL (SYSTEM, Administrators, and the service
-   account when it isn't `LocalSystem`).
-4. Runs `minivault.exe init`, prints the recovery material, and asks the operator to type `SAVED` before
-   continuing — the recovery material is shown only once and is not stored anywhere after this step. The
-   `--out` file used to display it is deleted once you confirm. Pass `-NonInteractive` to skip the prompt
-   (a warning is printed instead) for unattended installs; make sure the recovery output was captured some
-   other way first.
-5. Registers the Windows service (`sc.exe create`/`description`/`failure`, restarting on failure) and
-   starts it.
-6. Waits up to 30 seconds for `https://localhost:<port>/v1/health` to answer, and prints the result.
+3. Locks `%ProgramData%\MiniVault` down with a protected ACL, granted by **well-known SID** rather than by
+   localized group name so the script works on non-English Windows: `*S-1-5-18` (SYSTEM) and
+   `*S-1-5-32-544` (Administrators) get `(OI)(CI)F`, and any `-ServiceAccount` other than `LocalSystem`
+   gets `(OI)(CI)RX` (`*S-1-5-20` for `NetworkService`, `*S-1-5-19` for `LocalService`, the account name
+   otherwise). Read/execute is enough: the config and key file are written only by `init`/`recover`, which
+   run as the operator. The server preserves that grant — `DpapiMasterKeyProvider` merges the explicit
+   ACEs already present on the directory when it re-protects it, and copies them (read-only) onto
+   `masterkey.bin`.
+4. Runs `minivault.exe init` (via `Start-Process` with both streams captured, so a failure reports stderr),
+   prints the recovery material, and asks the operator to type `SAVED` before continuing — the recovery
+   material is shown only once and is not stored anywhere after this step. The `--out` file used to display
+   it is deleted once you confirm. Pass `-NonInteractive` to skip the prompt (a warning is printed instead)
+   for unattended installs; make sure the recovery output was captured some other way first.
+5. Prints the SQL grant script (see below), then registers the Windows service
+   (`sc.exe create`/`description`/`failure`, restarting on failure) and starts it — unless
+   `-SkipServiceStart` is passed, in which case the service is created but left stopped.
+6. Waits up to 30 seconds for `https://localhost:<port>/v1/health` to answer, and prints the result. The
+   probe uses `HttpClient` with a permissive certificate callback (`Invoke-WebRequest -SkipCertificateCheck`
+   does not exist on Windows PowerShell 5.1). Skipped when `-SkipServiceStart` is used.
 
-At the end it prints a reminder SQL script to grant the service account access to the database
-(`CREATE LOGIN` / `CREATE USER` / `ALTER ROLE db_owner`) — run that on the target SQL Server first if the
-account doesn't already have access, or `init` (step 4) will fail.
+**Before** the service is created (between steps 4 and 5) the script prints the SQL script that grants the
+service account access to the database (`CREATE LOGIN` / `CREATE USER` / `ALTER ROLE db_owner`). Run it on
+the target SQL Server before the service starts, or the service cannot reach the database. For a strictly
+ordered rollout pass `-SkipServiceStart`, run the SQL grant, then `sc.exe start <ServiceName>`.
 
 ### Example: certificate from a PFX file
 
@@ -72,16 +83,17 @@ exits without touching the machine. It does **not** require an elevated shell, w
 | `-InstallDir` | `C:\Program Files\Karmasis\MiniVault` | |
 | `-SourceDir` | (required) | Publish output folder. |
 | `-ConnectionString` | (required) | Written to the machine config. A `Password=` in it triggers a warning (the file is ACL-protected but still plaintext). |
-| `-ServiceAccount` | `LocalSystem` | `LocalSystem`/`NetworkService`/`LocalService` need no password; any other account needs `-ServiceAccountPassword` and must already have log-on-as-a-service rights. |
-| `-ServiceAccountPassword` | | Only used when `-ServiceAccount` is a real account. |
+| `-ServiceAccount` | `LocalSystem` | `LocalSystem`/`NetworkService`/`LocalService` need no password; any other account needs `-ServiceAccountPassword` (validated up front) and must already have log-on-as-a-service rights. |
+| `-ServiceAccountPassword` | | Required when `-ServiceAccount` is a real account. |
 | `-Recovery` | `single` | `single` or `shamir`. |
 | `-Shares` / `-Threshold` | | Required (both ≥ 2, `Threshold ≤ Shares ≤ 255`) when `-Recovery shamir`. |
 | `-MasterKeyPassword` | | Optional: derive the master key from a password instead of a random one. |
-| `-CertificatePath` / `-CertificatePassword` | | Exactly one of this pair or `-CertificateThumbprint` is required. |
-| `-CertificateThumbprint` | | See above. |
+| `-CertificatePath` / `-CertificatePassword` | | Exactly one of this pair or `-CertificateThumbprint` is required. The PFX password is stored in plain text in the (ACL-protected) ProgramData config; the script warns about this in yellow. |
+| `-CertificateThumbprint` | | See above. Must normalize to 40 hex characters (spaces, colons and the invisible mark `certmgr.msc` copies are stripped). |
 | `-Url` | `https://0.0.0.0:8200` | Must be an absolute `https://` URL. |
 | `-ServiceName` | `KarmasisMiniVault` | |
 | `-NonInteractive` | off | Skips the `SAVED` confirmation prompt (prints a warning instead). |
+| `-SkipServiceStart` | off | Creates the service but does not start it, so the SQL grant can be applied first. Start it later with `sc.exe start <ServiceName>`. |
 | `-WhatIfMode` | off | Preview only; does not require elevation. |
 
 ## 3. Uninstall
@@ -94,9 +106,10 @@ Stops and deletes the service and removes `-InstallDir`. `%ProgramData%\MiniVaul
 and machine config) is left in place unless `-PurgeData` is also passed:
 
 ```powershell
-.\uninstall.ps1 -ServiceName KarmasisMiniVault -InstallDir "C:\Program Files\Karmasis\MiniVault" -PurgeData
+.\uninstall.ps1 -ServiceName KarmasisMiniVault -InstallDir "C:\Program Files\Karmasis\MiniVault" -PurgeData -Force
 ```
 
-`-PurgeData` prints a warning and then deletes the master key. Without a separately stored recovery key,
-every secret in the database becomes permanently unrecoverable — only pass it when the vault (and its
-database) are also being decommissioned.
+`-PurgeData` prints a red warning and asks you to type `PURGE` before it deletes the master key. Without a
+separately stored recovery key, every secret in the database becomes permanently unrecoverable — only
+pass it when the vault (and its database) are also being decommissioned. `-Force` skips the confirmation
+prompt for unattended teardown.
