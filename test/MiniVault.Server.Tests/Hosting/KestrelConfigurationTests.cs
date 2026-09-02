@@ -1,6 +1,13 @@
-using System.Net;
+﻿using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using MiniVault.Server.Hosting;
 
 namespace MiniVault.Server.Tests.Hosting;
@@ -131,5 +138,93 @@ public class KestrelConfigurationTests : IDisposable
     {
         for (var i = 0; i < thumbprint.Length; i += 2)
             yield return thumbprint.Substring(i, 2);
+    }
+
+    // ---- What Kestrel actually binds -------------------------------------------------------------------------
+    // TestServer/WebApplicationFactory never start Kestrel, so the two tests below build a real WebApplication on
+    // a random loopback port. That is the only way to prove that endpoint configuration is refused and that the
+    // server ends up with exactly one HTTPS listener.
+
+    private WebApplicationBuilder CreateRealBuilder(params (string Key, string Value)[] settings)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = Environments.Development,
+            ContentRootPath = AppContext.BaseDirectory,
+        });
+        builder.Logging.ClearProviders();
+        builder.Configuration.AddInMemoryCollection(settings.Select(s => new KeyValuePair<string, string?>(s.Key, s.Value)));
+        return builder;
+    }
+
+    private static WebApplication BuildApp(WebApplicationBuilder builder)
+    {
+        var tls = builder.Configuration.GetSection(TlsOptions.SectionName).Get<TlsOptions>() ?? new TlsOptions();
+        KestrelConfiguration.Apply(builder, tls);
+        return builder.Build();
+    }
+
+    /// <summary>Kestrel materializes its options while the host is built, so the refusal surfaces from Build or
+    /// from StartAsync depending on the host shape; either way the server never reaches a listening state.</summary>
+    [Fact]
+    public async Task Apply_WithKestrelEndpointsInConfiguration_RefusesToStart()
+    {
+        var ex = await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await using var app = BuildApp(CreateRealBuilder(
+                ("Tls:Url", "https://127.0.0.1:0"),
+                ("Tls:AllowDevelopmentCertificate", "true"),
+                ("Kestrel:Endpoints:Http:Url", "http://127.0.0.1:0")));
+            await app.StartAsync();
+        });
+
+        ex.GetBaseException().Message.ShouldBe("Kestrel:Endpoints is not supported: MiniVault listens only on Tls:Url over HTTPS.");
+    }
+
+    [Fact]
+    public async Task Apply_WithoutKestrelEndpoints_BindsExactlyOneHttpsAddress()
+    {
+        await using var app = await StartRealHttpsServerAsync();
+        try
+        {
+            var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses;
+
+            addresses.Count.ShouldBe(1);
+            addresses.Single().ShouldStartWith("https://");
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    /// <summary>Starts a real server on the ASP.NET Core development certificate; if this machine has none Kestrel
+    /// can use, retries with a self-signed PFX written to the test's temp directory.</summary>
+    private async Task<WebApplication> StartRealHttpsServerAsync()
+    {
+        var withDevCertificate = BuildApp(CreateRealBuilder(
+            ("Tls:Url", "https://127.0.0.1:0"),
+            ("Tls:AllowDevelopmentCertificate", "true")));
+        try
+        {
+            await withDevCertificate.StartAsync();
+            return withDevCertificate;
+        }
+        catch (Exception)
+        {
+            await withDevCertificate.DisposeAsync();
+        }
+
+        var pfx = Path.Combine(_dir, "kestrel.pfx");
+        File.WriteAllBytes(pfx, CreateSelfSignedPfx("pw"));
+        // AllowDevelopmentCertificate is explicitly turned off: appsettings.Development.json (copied next to the
+        // test binaries by the project reference) turns it on, which would send us back to the dev certificate.
+        var withOwnCertificate = BuildApp(CreateRealBuilder(
+            ("Tls:Url", "https://127.0.0.1:0"),
+            ("Tls:AllowDevelopmentCertificate", "false"),
+            ("Tls:Certificate:Path", pfx),
+            ("Tls:Certificate:Password", "pw")));
+        await withOwnCertificate.StartAsync();
+        return withOwnCertificate;
     }
 }

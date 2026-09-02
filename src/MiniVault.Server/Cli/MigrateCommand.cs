@@ -1,5 +1,6 @@
-using System.CommandLine;
+﻿using System.CommandLine;
 using Microsoft.EntityFrameworkCore;
+using MiniVault.Server.Audit;
 using MiniVault.Server.Data;
 using MiniVault.Server.Data.Entities;
 using MiniVault.Server.Vault;
@@ -20,20 +21,24 @@ public static class MigrateCommand
             var db = scope.ServiceProvider.GetRequiredService<MiniVaultDbContext>();
             var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
-            var pending = (await db.Database.GetPendingMigrationsAsync(ct)).Count();
+            var pending = (await db.Database.GetPendingMigrationsAsync(ct)).ToList();
             await db.Database.MigrateAsync(ct);
 
+            // Recorded after MigrateAsync (the AuditLog table may not exist before it) and saved on its own, so a
+            // failure to write the audit row cannot roll back schema changes that have already been applied. The
+            // migration names are recorded rather than just a count: "which migrations ran" is the question an
+            // operator asks after an upgrade.
             db.AuditLogs.Add(new AuditLog
             {
                 Timestamp = clock.GetUtcNow(),
                 ClientId = VaultInitializer.AuditClientId,
                 Action = "migrate",
                 Success = true,
-                Detail = pending.ToString(),
+                Detail = AuditWriter.TruncateDetail(string.Join(", ", pending)),
             });
             await db.SaveChangesAsync(ct);
 
-            await output.WriteLineAsync(pending == 0 ? "Database is up to date." : $"Applied {pending} migration(s).");
+            await output.WriteLineAsync(pending.Count == 0 ? "Database is up to date." : $"Applied {pending.Count} migration(s).");
             return 0;
         });
         return command;

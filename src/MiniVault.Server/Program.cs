@@ -1,3 +1,5 @@
+using System.Reflection;
+using Microsoft.Data.SqlClient;
 using MiniVault.Server.Api;
 using MiniVault.Server.Auth;
 using MiniVault.Server.Cli;
@@ -26,14 +28,39 @@ builder.Services.Configure<TlsOptions>(builder.Configuration.GetSection(TlsOptio
 builder.Services.AddHostedService<TlsStartupCheck>();
 builder.Services.AddHostedService<VaultStartupCheck>();
 
-var app = builder.Build();
-app.UseMiniVaultErrorHandling();
-app.UseMiniVaultStatusCodePages();
-app.UseRateLimiter();
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapMiniVaultApi();
-app.Run();
-return 0;
+// Everything above stays outside the guard on purpose: it is pure wiring, and KestrelConfiguration.Apply's
+// development-certificate check must stay observable to test hosts that build this entry point's IHost themselves.
+try
+{
+    var app = builder.Build();
+    app.UseMiniVaultErrorHandling();
+    app.UseMiniVaultStatusCodePages();
+    app.UseRateLimiter();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapMiniVaultApi();
+    app.Run();
+    return 0;
+}
+// A startup failure is an operator's problem, not a developer's: report the reason on one line and exit 3, so a
+// Windows service / container restart loop and `sc.exe query` show something actionable instead of a stack trace.
+// OperationCanceledException and HostAbortedException are normal shutdowns, and so is the framework-internal
+// StopTheHostException (matched by name) that a host resolver throws once it has the IHost it wanted.
+// The entry-assembly guard keeps this from firing when something else hosts this entry point in its own process
+// (WebApplicationFactory, dotnet-ef): there the exception must keep propagating, or a "refuses to start" test
+// would see a cleanly exited application instead of the failure it is asserting.
+catch (Exception ex) when (ex is not (OperationCanceledException or HostAbortedException)
+                           && ex.GetType().Name != "StopTheHostException"
+                           && Assembly.GetEntryAssembly() == typeof(Program).Assembly)
+{
+    var reason = ex.GetBaseException();
+    using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
+    var logger = loggerFactory.CreateLogger("MiniVault");
+    if (reason is SqlException)
+        logger.LogCritical("MiniVault cannot start: Database is not reachable. Check ConnectionStrings:MiniVault. {Reason}", reason.Message);
+    else
+        logger.LogCritical("MiniVault cannot start: {Reason}", reason.Message);
+    return 3;
+}
 
 public partial class Program { }

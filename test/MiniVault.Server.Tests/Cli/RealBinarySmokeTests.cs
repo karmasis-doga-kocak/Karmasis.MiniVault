@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using MiniVault.Server.Tests.TestDoubles;
 
 namespace MiniVault.Server.Tests.Cli;
@@ -45,5 +45,37 @@ public class RealBinarySmokeTests : IAsyncLifetime
         process.ExitCode.ShouldBe(0, $"stdout:\n{stdout}\nstderr:\n{stderr}");
         stdout.ShouldContain("Recovery key:");
         stdout.ShouldContain("MINIVAULT__MASTERKEY");
+    }
+
+    /// <summary>A startup failure has to read like an operator message, not a crash: exit code 3 (so a service
+    /// restart loop and `sc.exe query` show something actionable), one line naming the setting at fault, and no
+    /// stack frames.</summary>
+    [Fact]
+    public async Task Serve_WithMissingCertificate_ExitsWithCode3_AndReadableMessage()
+    {
+        var psi = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add(LocateServerDll());
+        // No command word: this starts the server. No certificate is configured, so startup must fail.
+        psi.ArgumentList.Add("--Tls:Url"); psi.ArgumentList.Add("https://127.0.0.1:0");
+        psi.ArgumentList.Add("--ConnectionStrings:MiniVault"); psi.ArgumentList.Add(_db.ConnectionString);
+        psi.ArgumentList.Add("--MasterKey:Provider"); psi.ArgumentList.Add("Environment");
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+        psi.Environment.Remove("MINIVAULT__MASTERKEY");
+
+        using var process = Process.Start(psi)!;
+        var stdout = await process.StandardOutput.ReadToEndAsync();
+        var stderr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        var output = stdout + stderr;
+        process.ExitCode.ShouldBe(3, output);
+        output.ShouldContain("MiniVault cannot start");
+        output.ShouldContain("Tls:Certificate");
+        output.ShouldNotContain("   at ");
     }
 }

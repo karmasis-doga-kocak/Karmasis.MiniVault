@@ -1,4 +1,4 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
@@ -10,7 +10,10 @@ namespace MiniVault.Server.Keys;
 /// merged into the result. That is what keeps a grant an operator added out-of-band — e.g. the
 /// <c>-ServiceAccount</c> grant <c>deploy/windows/install.ps1</c> puts on <c>%ProgramData%\MiniVault</c> —
 /// from being dropped when the server re-protects the directory or writes the master key file. Only
-/// inherited ACEs are removed; Deny ACEs are never copied.</para></summary>
+/// inherited ACEs are removed; Deny ACEs are never copied, and neither are Allow ACEs for the broad
+/// well-known groups listed in <see cref="BroadSidTypes"/> — carrying <c>Everyone</c> or <c>Users</c> over
+/// onto key material would defeat the point of the ACL, so such a grant is dropped from the key file and
+/// from the directory alike.</para></summary>
 [SupportedOSPlatform("windows")]
 internal static class WindowsFileAcl
 {
@@ -18,6 +21,22 @@ internal static class WindowsFileAcl
     /// the DPAPI blob back, never enough to overwrite it.</summary>
     private const FileSystemRights MinimumFileRights =
         FileSystemRights.Read | FileSystemRights.ReadAttributes | FileSystemRights.ReadPermissions;
+
+    /// <summary>Well-known groups whose grants are never carried over: everyone (S-1-1-0), all local users
+    /// (S-1-5-32-545), everyone authenticated (S-1-5-11), everyone logged on interactively, and everyone logged
+    /// on over the network. A grant to a specific account — the service account
+    /// <c>deploy/windows/install.ps1</c> configures, e.g. NETWORK SERVICE — is still kept.</summary>
+    private static readonly WellKnownSidType[] BroadSidTypes =
+    [
+        WellKnownSidType.WorldSid,
+        WellKnownSidType.BuiltinUsersSid,
+        WellKnownSidType.AuthenticatedUserSid,
+        WellKnownSidType.InteractiveSid,
+        WellKnownSidType.NetworkSid,
+    ];
+
+    private static bool IsBroadIdentity(IdentityReference identity) =>
+        identity is SecurityIdentifier sid && BroadSidTypes.Any(sid.IsWellKnown);
 
     private static IdentityReference[] OwnerIdentities() =>
     [
@@ -64,8 +83,9 @@ internal static class WindowsFileAcl
         return security;
     }
 
-    /// <summary>The Allow ACEs written directly onto <paramref name="directory"/> (inherited ones excluded).
-    /// Returns nothing when the directory is missing or its DACL cannot be read.</summary>
+    /// <summary>The Allow ACEs written directly onto <paramref name="directory"/> (inherited ones, and ones for
+    /// the broad groups in <see cref="BroadSidTypes"/>, excluded). Returns nothing when the directory is missing
+    /// or its DACL cannot be read.</summary>
     private static List<FileSystemAccessRule> ExplicitAllowRules(DirectoryInfo? directory)
     {
         if (directory is null) return [];
@@ -85,6 +105,7 @@ internal static class WindowsFileAcl
 
         return rules.Cast<FileSystemAccessRule>()
             .Where(rule => rule.AccessControlType == AccessControlType.Allow)
+            .Where(rule => !IsBroadIdentity(rule.IdentityReference))
             .ToList();
     }
 }

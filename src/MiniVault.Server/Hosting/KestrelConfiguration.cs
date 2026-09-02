@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
@@ -6,10 +6,16 @@ using Microsoft.Extensions.Logging;
 namespace MiniVault.Server.Hosting;
 
 /// <summary>
-/// Wires Kestrel to the single HTTPS endpoint described by <see cref="TlsOptions"/>. Because the endpoint is
-/// registered explicitly via <see cref="KestrelServerOptions.Listen(IPEndPoint, Action{ListenOptions})"/>, Kestrel
-/// never falls back to <c>ASPNETCORE_URLS</c>/<c>--urls</c>/<c>Kestrel:Endpoints</c> configuration, and no
-/// plain-HTTP listener is ever created.
+/// Wires Kestrel to the single HTTPS endpoint described by <see cref="TlsOptions"/>, and makes sure nothing else
+/// can add a second listener.
+/// <para><b>Blocked (startup fails):</b> <c>Kestrel:Endpoints</c> and <c>Kestrel:EndpointDefaults</c>. An operator
+/// who writes them expects them to take effect — most dangerously an extra plain-HTTP listener — so they are
+/// rejected outright instead of being silently ignored.</para>
+/// <para><b>Ignored (startup continues):</b> everything else under the <c>Kestrel</c> configuration section
+/// (<c>Kestrel:Certificates</c>, limits, ...), because the configuration loader ASP.NET Core installs over that
+/// section is replaced with an empty configuration here; and <c>ASPNETCORE_URLS</c>/<c>--urls</c>/
+/// <c>ASPNETCORE_HTTP_PORTS</c>, which container images and hosting panels set unconditionally — a warning is
+/// logged for <c>ASPNETCORE_URLS</c> and the explicit <c>Listen</c> below wins.</para>
 /// </summary>
 public static class KestrelConfiguration
 {
@@ -87,23 +93,50 @@ public static class KestrelConfiguration
     internal const string DevelopmentCertificateNotAllowedMessage =
         "Tls:AllowDevelopmentCertificate is only allowed in the Development environment. Configure Tls:Certificate:Path or Tls:Certificate:Thumbprint.";
 
+    /// <summary>Message used by both <see cref="Apply"/> and <see cref="TlsStartupCheck"/> when a development
+    /// certificate is used outside Development because
+    /// <see cref="TlsOptions.AllowDevelopmentCertificateOutsideDevelopment"/> is set.</summary>
+    internal const string DevelopmentCertificateOutsideDevelopmentMessage =
+        "Development certificate allowed outside Development by configuration; do not use in production.";
+
+    /// <summary>Message thrown when Kestrel endpoint configuration is present. Endpoint configuration is rejected
+    /// rather than ignored so an operator is never left believing an extra listener was created.</summary>
+    internal const string KestrelEndpointsNotSupportedMessage =
+        "Kestrel:Endpoints is not supported: MiniVault listens only on Tls:Url over HTTPS.";
+
+    /// <summary>True when configuration carries Kestrel endpoint definitions (<c>Kestrel:Endpoints:*</c> or
+    /// <c>Kestrel:EndpointDefaults:*</c>), which MiniVault refuses to start with.</summary>
+    internal static bool HasEndpointConfiguration(IConfiguration configuration) =>
+        configuration.GetSection("Kestrel:Endpoints").GetChildren().Any() ||
+        configuration.GetSection("Kestrel:EndpointDefaults").GetChildren().Any();
+
     /// <summary>Configures Kestrel to listen on <see cref="TlsOptions.Url"/> only, over HTTPS.</summary>
     public static void Apply(WebApplicationBuilder builder, TlsOptions tls)
     {
         if (tls.AllowDevelopmentCertificate && !builder.Environment.IsDevelopment() && !tls.AllowDevelopmentCertificateOutsideDevelopment)
             throw new InvalidOperationException(DevelopmentCertificateNotAllowedMessage);
 
+        if (tls.AllowDevelopmentCertificate && !builder.Environment.IsDevelopment())
+            LogBootstrap(log => log.LogCritical("{Message}", DevelopmentCertificateOutsideDevelopmentMessage));
+
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
         {
-            using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
-            loggerFactory.CreateLogger(nameof(KestrelConfiguration)).LogWarning(
-                "ASPNETCORE_URLS is set but is ignored: MiniVault listens only on Tls:Url ({TlsUrl}) because HTTP is never enabled.", tls.Url);
+            LogBootstrap(log => log.LogWarning(
+                "ASPNETCORE_URLS is set but is ignored: MiniVault listens only on Tls:Url ({TlsUrl}) because HTTP is never enabled.", tls.Url));
         }
 
         var endpoint = ParseEndpoint(tls.Url);
+        var configuration = builder.Configuration;
 
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
+            if (HasEndpointConfiguration(configuration))
+                throw new InvalidOperationException(KestrelEndpointsNotSupportedMessage);
+
+            // ConfigureWebDefaults binds Kestrel to the "Kestrel" configuration section. Replace that loader with an
+            // empty configuration before Listen, so nothing from configuration can add a listener behind our back.
+            kestrel.Configure(new ConfigurationBuilder().Build());
+
             kestrel.Listen(endpoint, listen =>
             {
                 if (tls.AllowDevelopmentCertificate)
@@ -112,6 +145,13 @@ public static class KestrelConfiguration
                     listen.UseHttps(LoadCertificate(tls.Certificate));
             });
         });
+    }
+
+    /// <summary>Logs a single line before the host (and its logging pipeline) exists.</summary>
+    private static void LogBootstrap(Action<ILogger> log)
+    {
+        using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
+        log(loggerFactory.CreateLogger(nameof(KestrelConfiguration)));
     }
 
     /// <summary>Resolves the host part of <paramref name="url"/> to an <see cref="IPEndPoint"/>. Hostnames are not

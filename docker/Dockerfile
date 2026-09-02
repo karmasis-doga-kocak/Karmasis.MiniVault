@@ -35,6 +35,11 @@ RUN dotnet publish src/MiniVault.Server -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ENV ASPNETCORE_ENVIRONMENT=Production
+# The aspnet base image sets ASPNETCORE_HTTP_PORTS=8080, which would make Kestrel add a plain-HTTP listener.
+# MiniVault listens only on Tls:Url over HTTPS, so both hints are cleared here; leaving them set would only
+# produce a startup warning and a port nothing serves.
+ENV ASPNETCORE_HTTP_PORTS=
+ENV ASPNETCORE_URLS=
 WORKDIR /app
 
 # curl is needed by HEALTHCHECK below; installed as root before dropping privileges.
