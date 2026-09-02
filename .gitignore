@@ -13,3 +13,7 @@ appsettings.Local.json
 # Local nupkg feed staged by docker/build-local.ps1 for the Docker build context.
 packages/*
 !packages/.gitkeep
+
+# Docker local secrets (the .env.example template stays tracked).
+docker/.env
+docker/certs/

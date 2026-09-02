@@ -8,12 +8,16 @@ services:
     image: karmasis/minivault:dev
     profiles: ["init"]
     command: ["init", "--recovery", "shamir", "--shares", "3", "--threshold", "2"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ConnectionStrings__MiniVault: ${CONNECTIONSTRINGS__MINIVAULT}
       MasterKey__Provider: Environment
 
   minivault:
     image: karmasis/minivault:dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ConnectionStrings__MiniVault: ${CONNECTIONSTRINGS__MINIVAULT}
       MasterKey__Provider: Environment

@@ -68,7 +68,9 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 730 -nodes \
 ```
 
 `docker/certs/` is mounted read-only at `/certs` by the `minivault` service; do not
-commit real certificates or passwords.
+commit real certificates or passwords (`docker/certs/` and `docker/.env` are
+git-ignored). The container runs as a non-root user (uid 1654), so the PFX must be
+readable by it: `chmod 644 certs/minivault.pfx`.
 
 ## 3. Initialize
 
@@ -145,5 +147,10 @@ database, then `docker compose -f docker/docker-compose.yml restart minivault`.
 - SQL Server is intentionally not part of this compose file - point
   `ConnectionStrings__MiniVault` at whatever instance you already run (a host SQL
   Server reachable via `host.docker.internal`, or a separate compose/stack you manage).
+- Both services declare `extra_hosts: ["host.docker.internal:host-gateway"]`, which is a
+  no-op on Docker Desktop but is what makes `host.docker.internal` resolve to the host on
+  plain Linux Docker engines, where a host SQL Server would otherwise be unreachable.
+- The image is framework-dependent (it runs on the `aspnet:10.0` runtime base), so a build
+  adds only ~130 MB of unique layers on top of that shared base image.
 - `packages/` at the repo root is a git-ignored staging folder used only during
   `build-local.ps1`; it is emptied again once the build finishes.
