@@ -1,6 +1,51 @@
 # MiniVault operations
 
-This page covers installation, the operator commands, TLS, backup/restore, upgrading, and troubleshooting.
+This page covers installation, the operator commands, TLS, backup/restore, upgrading, troubleshooting,
+and the pre-production checklist.
+
+## Quick reference
+
+### Configuration keys
+
+Every key can be set in `appsettings.json`, as an environment variable (`Tls__Url`), or as a
+`--Section:Key value` command-line override.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ConnectionStrings:MiniVault` | `Server=(localdb)\MSSQLLocalDB;Database=MiniVault;Integrated Security=true;TrustServerCertificate=true` | The MiniVault database. The shipped default is a developer LocalDB; every real install replaces it. |
+| `MasterKey:Provider` | `Dpapi` | `Dpapi` (Windows file) or `Environment` (container). |
+| `MasterKey:Path` | `%ProgramData%\MiniVault\masterkey.bin` | `Dpapi` only: where the protected key file lives. |
+| `Tls:Url` | `https://0.0.0.0:8200` | The single endpoint Kestrel binds. Must be `https://` with an IP-literal host. |
+| `Tls:Certificate:Path` | `null` | PFX file holding the server certificate. |
+| `Tls:Certificate:Password` | `null` | Password for that PFX. Never logged. |
+| `Tls:Certificate:Thumbprint` | `null` | SHA-1 thumbprint of a store certificate instead. Exactly one of `Path` or `Thumbprint`. |
+| `Tls:Certificate:StoreName` | `My` | Store to search for `Thumbprint`. |
+| `Tls:Certificate:StoreLocation` | `LocalMachine` | `LocalMachine` or `CurrentUser`. |
+| `Tls:AllowDevelopmentCertificate` | `false` | Use the ASP.NET Core development certificate. Development environment only. |
+| `Tls:AllowDevelopmentCertificateOutsideDevelopment` | `false` | Lets the previous key work outside Development. Automated test hosts only. |
+| `Token:LifetimeMinutes` | `15` | Access-token lifetime. |
+| `Token:LoginRateLimitPerMinute` | `30` | Requests a minute accepted on `/v1/auth/token`, per server process. |
+
+`Kestrel:Endpoints` and `Kestrel:EndpointDefaults` are rejected at startup, and `ASPNETCORE_URLS`,
+`--urls`, `ASPNETCORE_HTTP_PORTS` and `ASPNETCORE_PREFERHOSTINGURLS` are ignored: `Tls:Url` is the
+only listener.
+
+Three environment variables are read directly rather than as configuration keys:
+`MINIVAULT__MASTERKEY` (the master key itself, with `MasterKey:Provider=Environment`),
+`MINIVAULT_INIT_MASTER_KEY` (the password `init --master-key-from-env` derives the key from), and
+`ASPNETCORE_ENVIRONMENT` (`Development` unlocks `Tls:AllowDevelopmentCertificate`).
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `minivault init --recovery single\|shamir` | Creates the schema, master key, recovery material and first data key. Runs once. |
+| `minivault recover --new-master-key <pw\|auto>` | Replaces the master key from the recovery key or shares; rewraps every data key. |
+| `minivault rotate-dek` | Creates a new active data key. Needs a service restart afterwards. |
+| `minivault migrate` | Applies pending schema migrations. Run after an upgrade, before starting the service. |
+| `minivault client add\|remove\|assign\|enable\|disable\|list` | Manages client identities and their role assignments. |
+| `minivault role add\|remove\|grant\|list` | Manages roles and their scope rules. |
+| `minivault` (no command) | Starts the server. |
 
 ## How the keys fit together
 
@@ -154,7 +199,9 @@ sc.exe start KarmasisMiniVault
 
 `-SkipInit` skips vault creation entirely (files, config, ACLs and the service are still installed);
 it is for restoring an existing vault onto a new host rather than creating one — see "Backup and
-restore" below.
+restore" below. `-NonInteractive` replaces the "type SAVED to continue" prompt after `init` with a
+warning, for unattended provisioning; the recovery material still has to be collected from the
+script's output.
 
 **Least-privilege SQL grants.** The script prints two scripts, not one. The *running service* only
 reads and writes rows, so it needs `db_datareader` + `db_datawriter` and nothing more:
@@ -280,7 +327,7 @@ minivault init --recovery shamir --shares 5 --threshold 3 --master-key "my passp
 | `--shares n --threshold k` | Shamir only. `2 ≤ k ≤ n ≤ 255`. Recommended minimum: 3 shares, threshold 2. |
 | `--master-key <password>` | Derive the master key from a password (PBKDF2, salt and iteration count are stored in the database). Without it a random key is generated. The password is used only to derive the key at this moment; it is **not** a way back in later — if the master key file or environment value is lost, only the recovery material helps. **Interactive use only:** the password is on the command line, so anything that can list processes — and command-line auditing (Event ID 4688) — can read it. |
 | `--master-key-from-env` | Same as `--master-key`, but the password is read from the `MINIVAULT_INIT_MASTER_KEY` environment variable and removed from the process's environment as soon as it has been read, so it never reaches a command line. This is what `install.ps1` and the MSI use. Mutually exclusive with `--master-key`. |
-| `--out <file>` | Also write the output to a file. Delete the file after the material is stored safely. The file is created with permissions for the current user only and is never overwritten; delete it after the material is stored safely. |
+| `--out <file>` | Also write the output to a file. The file is created with permissions for the current user only and is never overwritten (`init` fails if it already exists). Delete it once the material is stored safely. |
 | `--force` | Overwrite a master key that already exists in the provider. Without it, `init` refuses so that another vault on the same host does not lose its key. |
 
 Output example:
@@ -297,9 +344,10 @@ Share 3: Aw...
 Master key stored by the Dpapi provider.
 ```
 
-With the `Environment` provider the last line instead prints the master key; set it as `MINIVAULT__MASTERKEY` before starting the server.
-
-With the `Environment` provider the master key is printed to standard output — in Docker that means `docker logs`; clear or rotate the log after copying the value.
+With the `Environment` provider the last line instead reads
+`Master key (set as MINIVAULT__MASTERKEY before starting the server): <base64>`, because that
+provider cannot store the key itself. That means the master key goes to standard output — in Docker,
+to `docker logs`; copy the value into your own configuration and clear or rotate the log.
 
 ### `minivault recover`
 
@@ -310,7 +358,17 @@ minivault recover --new-master-key auto --recovery-key <key>
 minivault recover --new-master-key "new passphrase" --share <share1> --share <share3>
 ```
 
-`auto` generates a random master key. Any `threshold` shares work, in any order.
+`auto` generates a random master key. Any `threshold` shares work, in any order. Give exactly one of
+`--recovery-key` or one or more `--share`; both, or neither, is a parse error.
+
+```
+Master key replaced. Data keys rewrapped: 2.
+Master key stored by the Dpapi provider.
+```
+
+If the rewrap succeeds but the provider cannot store the new key, the command fails with a
+`VaultException` whose message carries that key in base64 — place it by hand. The recovery material
+stays valid either way, because `WrappedByRecovery` is never touched.
 
 ### `minivault rotate-dek`
 
@@ -318,6 +376,10 @@ Creates a new active data key. New and updated secrets use it; existing secrets 
 
 ```
 minivault rotate-dek
+```
+
+```
+Active data key version: 2
 ```
 
 Restart the MiniVault service after rotating; the running server loads data keys at startup and will not see the new version until it restarts.
@@ -343,9 +405,11 @@ or, when nothing was pending:
 Database is up to date.
 ```
 
-### `minivault` (no command) / `minivault serve`
+### `minivault` (no command)
 
-Starts the server. It refuses to start when the vault is not initialized or the master key does not unwrap the data keys; the reason is written to the log.
+Starts the server. There is no `serve` subcommand: anything that is not one of the commands above
+starts the server. It refuses to start when the vault is not initialized or the master key does not
+unwrap the data keys; the reason is written to the log (see "Troubleshooting").
 
 ## Clients and roles
 
@@ -450,14 +514,14 @@ The last command prints the client's secret once. Copy it into the consuming ser
 
 ### Audit trail
 
-Every command above writes an audit row with client id `cli`. The action names are `client.add`, `client.remove`, `client.assign`, `client.enable`, `client.disable`, `role.add`, `role.remove`, `role.grant`.
+Every command above writes an audit row with client id `cli`. The action names are `client.add`, `client.remove`, `client.assign`, `client.enable`, `client.disable`, `role.add`, `role.remove`, `role.grant`. The other operator commands use the same client id and the action names `init`, `recover`, `rotate-dek` and `migrate`. `client list` and `role list` read nothing and write no audit row.
 
 ## Master key providers
 
 | `MasterKey:Provider` | Where the key lives | Notes |
 |---|---|---|
-| `Dpapi` (default) | `%ProgramData%\MiniVault\masterkey.bin`, DPAPI LocalMachine | Windows only. Bound to the machine: the file cannot be read on another host. `MasterKey:Path` overrides the location. |
-| `Environment` | `MINIVAULT__MASTERKEY` (base64, 32 bytes) | Containers / Linux. `init` prints the value once. |
+| `Dpapi` (default) | `%ProgramData%\MiniVault\masterkey.bin`, DPAPI LocalMachine | Windows only — the provider throws `PlatformNotSupportedException` elsewhere. Bound to the machine: the file cannot be read on another host. `MasterKey:Path` overrides the location. |
+| `Environment` | `MINIVAULT__MASTERKEY` (base64, 32 bytes) | Containers / Linux. Cannot store a key, so `init` and `recover` print the value once instead. |
 
 ## Backup and restore
 
@@ -584,6 +648,12 @@ since the ASP.NET Core development certificate is not a secret and is not tied t
 
 Any endpoint can also return `vault_unavailable` (503, the master key or database is temporarily unreachable) or `internal_error` (500, unexpected failure); both are logged server-side.
 
+Response bodies: `POST /v1/auth/token` returns `{"accessToken","expiresIn"}` (`expiresIn` in seconds,
+900 by default); `GET /v1/secrets/{name}` returns `{"name","value","contentType","version","updatedAt"}`
+with `value` base64-encoded; `PUT` returns `{"version"}`; `GET /v1/secrets?prefix=` returns
+`[{"name","version","updatedAt"}]` and never a value; `GET /v1/health` returns
+`{"status","initialized","activeDataKeyVersion"}`.
+
 `GET /v1/secrets?prefix=` validates the prefix: at most 256 characters of letters, digits, `.`, `_`, `-` and `/`. Anything else is `invalid_request` (400). An empty prefix is allowed and means "the whole vault", which needs a rule whose scope is the empty scope.
 
 `If-None-Match` on `GET /v1/secrets/{name}` is a proper entity-tag list: `"3"`, `W/"3"` (weak tags compare equal — the vault has one representation per version) and `*` all produce a 304, and the 304 carries the current `ETag` header just as the 200 would.
@@ -614,35 +684,42 @@ Audit rows are written on their own database connection, independent of the requ
 | `unauthorized` | Missing, invalid, or expired bearer token; or bad credentials at `/v1/auth/token`. |
 | `forbidden` | The token's roles have no rule whose scope is a prefix of the requested secret name (or the requested permission is read-only where write is required). |
 | `not_found` | No secret exists at that name. |
-| `invalid_request` | Malformed input: bad secret name, missing/non-base64 `value`, missing token fields, oversized value or content type. |
+| `invalid_request` | Malformed input: a secret name that is not 1–256 characters of letters, digits, `.`, `_` and `-` in `/`-separated segments; a missing or non-base64 `value`; missing `clientId`/`clientSecret`; a value over 1,048,576 bytes; a `contentType` over 128 characters; a body that is not readable JSON. |
 | `conflict` | The secret was modified concurrently (optimistic concurrency); retry the request. |
 | `vault_unavailable` | The vault is temporarily unavailable (master key or database unreachable). |
 | `internal_error` | Unexpected server failure. |
 
 ### Example: token, write, read with ETag, conditional read
 
+There is no plain-HTTP listener, so every example is `https://`. `-k` is only for a self-signed or
+development certificate; drop it against a certificate the host trusts.
+
 ```
-curl -s -X POST http://localhost:5000/v1/auth/token \
+curl -sk -X POST https://minivault.local:8200/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{"clientId":"c","clientSecret":"<client secret>"}'
 # {"accessToken":"eyJ...","expiresIn":900}
 
 TOKEN=eyJ...
 
-curl -s -X PUT http://localhost:5000/v1/secrets/test/one \
+curl -sk -X PUT https://minivault.local:8200/v1/secrets/test/one \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"value":"aGVsbG8=","contentType":"text/plain"}'
 # {"version":1}
 
-curl -si http://localhost:5000/v1/secrets/test/one -H "Authorization: Bearer $TOKEN"
+curl -ski https://minivault.local:8200/v1/secrets/test/one -H "Authorization: Bearer $TOKEN"
 # HTTP/1.1 200 OK
 # ETag: "1"
 # {"name":"test/one","value":"aGVsbG8=","contentType":"text/plain","version":1,"updatedAt":"..."}
 
-curl -si http://localhost:5000/v1/secrets/test/one \
+curl -ski https://minivault.local:8200/v1/secrets/test/one \
   -H "Authorization: Bearer $TOKEN" -H 'If-None-Match: "1"'
 # HTTP/1.1 304 Not Modified
 ```
+
+From Windows PowerShell 5.1, use `curl.exe` (plain `curl` is an alias for `Invoke-WebRequest`) and
+put the JSON body in a file (`-d "@body.json"`): PowerShell 5.1 mangles the double quotes when it
+hands a JSON string to a native executable, and the server answers `invalid_request`.
 
 ## Upgrading
 
@@ -752,3 +829,69 @@ database (connectivity, load) rather than at MiniVault's own logic.
   requests hit that endpoint in the current one-minute window, counted per server process. A
   legitimate client hitting this needs a lower retry rate or a higher limit; an unexpected burst is
   worth treating as a possible credential-guessing attempt, same as a `token.rejected`/failed-`token` spike.
+
+## Pre-production checklist
+
+**None of the items below has been executed.** The development machine that produced this repository
+has no elevated shell, no Advanced Installer, no CI agent and no production-shaped SQL Server, so
+every deployment path is written and unit-tested but never run end to end. Work through this list on
+real hosts before the first production install, and record what you find.
+
+### On an elevated Windows host (script path)
+
+1. Clean install: `install.ps1 -CertificateThumbprint ...` with a real certificate in
+   `LocalMachine\My`. The service must reach `Running`, and `https://localhost:8200/v1/health` must
+   answer 200 **while running as LocalSystem**. Neither `MachineKeySet` certificate loading nor a
+   DPAPI `LocalMachine` unwrap has ever run in a service context.
+2. The same install with `-CertificatePath` / `-CertificatePassword`, using a password that contains
+   a space.
+3. `icacls "%ProgramData%\MiniVault"`: only SYSTEM, `BUILTIN\Administrators` and the service account;
+   no `BUILTIN\Users`, no `Everyone`; inheritance disabled. Check `masterkey.bin` again after the
+   first service start, since the server re-applies the ACL then.
+4. A non-LocalSystem account: `-ServiceAccount CORP\svc -ServiceAccountPassword ...`. Record whether
+   error 1069 appears and whether `SeServiceLogonRight` had to be granted separately.
+5. Run `install.ps1` a **second** time on the same host, to confirm it upgrades in place.
+6. `-SkipServiceStart`, then apply the SQL grant, then `sc.exe start`. Confirm the service works with
+   only `db_datareader` + `db_datawriter`.
+7. `minivault migrate` against an empty database and against an up-to-date one. Expect
+   `Database is up to date.` on the second run, and an `AuditLog` row for each.
+8. `uninstall.ps1` without `-PurgeData` leaves `%ProgramData%\MiniVault` behind. Only try
+   `-PurgeData -Force` on a host you are about to discard.
+9. **Full restore drill.** Back up the database, discard the host, then on a different machine run
+   `install.ps1 -SkipInit -SkipServiceStart`, restore the database, run
+   `minivault recover --new-master-key auto --share ...`, start the service, and read a secret that
+   was written before the move. This is the single most important item on the list.
+
+### On a machine with Advanced Installer (MSI path)
+
+10. Build the MSI and read the ICE validation output, in particular for a duplicated `minivault.exe`
+    component (ICE30) and the 64-bit component attributes (ICE80).
+11. Silent install with `/l*v`. Search the log for the connection string, the PFX password and the
+    master key: none of them may appear.
+12. After the install the service is `Running`, `%ProgramData%\MiniVault\recovery-*.txt` is readable
+    only by SYSTEM and Administrators, and the operator has copied and deleted it.
+13. Major upgrade with no `MV_*` properties supplied: `appsettings.json` untouched, `init` skipped,
+    service running again afterwards.
+14. Uninstall leaves `%ProgramData%` in place, and a fresh install over it works.
+15. Verify the `AdvancedInstaller@2` task's input names against the installed extension's
+    `task.json` before setting `buildMsi=true`.
+
+### On a CI agent
+
+16. Nothing restores until `Karmasis.Cryptography` — preferably a stable version that carries a
+    `netstandard2.0` target — is published to `artifactrepo` / `artifactrepodev`.
+17. Confirm the `devops-vg` variable group holds `solution`, `BuildConfiguration`,
+    `dockerRegistry*`, `project`, `groupId`, `vgMAJOR`/`vgMINOR`/`vgPATCH`/`vgRC` and
+    `AdvancedInstallerPath`.
+18. Run stages 1–2 first with `buildDocker=false` and `buildMsi=false`. Confirm `image_version`
+    flows between stages and that the pack step picks it up.
+19. Only then enable `buildDocker`, after the in-container feed credentials (the `TODO (DevOps team)`
+    block) and the docker login are sorted out.
+20. In the MSI stage, confirm the custom action tests actually run.
+
+### In a container
+
+21. The mounted PFX must be readable by uid 1654. Decide explicitly whether it is acceptable that
+    `docker inspect` shows `MINIVAULT__MASTERKEY` in clear text to anyone with the Docker socket.
+22. Confirm the container **refuses to start** when `Kestrel__Endpoints__Http__Url` is set, so no
+    plain-HTTP port can be opened.

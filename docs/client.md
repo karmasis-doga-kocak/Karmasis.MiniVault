@@ -2,7 +2,7 @@
 
 ## 1. What it does
 
-The MiniVault client fetches secrets from a MiniVault server over HTTP, so a service never
+The MiniVault client fetches secrets from a MiniVault server over HTTPS, so a service never
 has to embed its own copy of a connection string or an API key. It authenticates with a
 client id and secret, caches what it reads (in memory, and optionally on disk) so a brief
 server outage does not stop the service from starting, and raises typed exceptions instead
@@ -21,6 +21,19 @@ Both packages target `netstandard2.0`, so they run on .NET Framework 4.7.2+ and 
 container at all) only needs `Karmasis.MiniVault.Client`.
 
 ## 2. Quick reference
+
+`IMiniVaultClient` — the whole surface. It implements `IDisposable`; keep one per process.
+
+| Member | Returns | Notes |
+|---|---|---|
+| `GetSecretAsync(name, ct)` | `Secret` | Falls back to the cache when the server is unreachable. |
+| `SetSecretAsync(name, value, contentType, ct)` | `int` (the new version) | `value` is `byte[]`; `contentType` is optional. |
+| `DeleteSecretAsync(name, ct)` | — | Also removes the name from the memory and disk caches. |
+| `ListSecretsAsync(prefix, ct)` | `IReadOnlyList<SecretListItem>` | Names, versions and timestamps only — never values. Never cached. |
+| `SecretServedFromCache` | `event` | Raised when a value came from the cache instead of the server. |
+
+`Secret` carries `Name`, `Value` (`byte[]`), `ContentType`, `Version`, `UpdatedAt`, and `AsString()`
+for UTF-8 text.
 
 | Option | Default | Meaning | Validation |
 |---|---|---|---|
@@ -52,7 +65,7 @@ var options = new MiniVaultOptions
 {
     BaseUrl = "https://minivault.local:8200",
     ClientId = "dataskope-collector",
-    ClientSecret = ReadClientSecret(), // see section 6
+    ClientSecret = ReadClientSecret(), // see section 7
     CacheDirectory = @"C:\ProgramData\DataskopeCollector\cache",
 };
 
@@ -300,8 +313,8 @@ to read a secret without being allowed to list.
 |---|---|---|---|
 | `MiniVaultAuthException` | 401 | Bad or expired credentials, or a bearer token that no longer works. | Check `ClientId`/`ClientSecret`. Confirm the client was not removed or disabled (`minivault client list`). The client already retries once on its own after a 401 by fetching a fresh token — this exception means that retry also failed. |
 | `MiniVaultForbiddenException` | 403 | Authenticated, but no role grants access to that secret name (or the role is read-only and you called `SetSecretAsync`/`DeleteSecretAsync`). | Grant the scope: `minivault role grant <role> --scope <prefix> --permission <read\|write>`, then `minivault client assign`. |
-| `MiniVaultNotFoundException` | 404 | No secret exists at that name. | Check the name. Create it with `minivault client add` + `SetSecretAsync`, or fix a typo. |
-| `MiniVaultRequestException` | 400 / 409 | 400: malformed input (bad name, non-base64 value, oversized value). 409: the secret was modified concurrently. | Fix the input for 400. For 409, retry the write once — it is an optimistic-concurrency conflict, not a bug. |
+| `MiniVaultNotFoundException` | 404 | No secret exists at that name. | Check the name for a typo, or write the secret first with `SetSecretAsync` (or from another client that holds write on that scope). |
+| `MiniVaultRequestException` | 400 / 409 | 400: malformed input — a name outside 1–256 characters of letters, digits, `.`, `_`, `-` in `/`-separated segments, a value over 1,048,576 bytes, or a `contentType` over 128 characters. 409: the secret was modified concurrently. | Fix the input for 400. For 409, retry the write once — it is an optimistic-concurrency conflict, not a bug. |
 | `MiniVaultUnavailableException` | network error, timeout, 5xx, 429 | The server could not be reached, took too long, or is temporarily overloaded/rate-limited. | Retry with backoff. `GetSecretAsync` already falls back to the cache automatically when one is available — you only see this exception when there is nothing cached to fall back to. |
 
 Branch on the exception **type** (or on `MiniVaultException.ErrorCode`, which mirrors the
@@ -346,7 +359,7 @@ validation when `https://` is used, and it should never be set in production.
 ## 12. Classic Collector example
 
 A Ninject module that builds the client from `app.config` settings plus the DPAPI-protected
-secret file from section 6:
+secret file from section 7:
 
 ```csharp
 using System.Configuration;
@@ -363,7 +376,7 @@ public class MiniVaultModule : NinjectModule
         {
             BaseUrl = ConfigurationManager.AppSettings["MiniVault:BaseUrl"],
             ClientId = ConfigurationManager.AppSettings["MiniVault:ClientId"],
-            ClientSecret = ReadClientSecret(secretPath), // section 6
+            ClientSecret = ReadClientSecret(secretPath), // section 7
             CacheDirectory = ConfigurationManager.AppSettings["MiniVault:CacheDirectory"],
             RefreshInterval = TimeSpan.FromMinutes(5),
             ServerCertificateThumbprint = ConfigurationManager.AppSettings["MiniVault:ServerCertificateThumbprint"],
