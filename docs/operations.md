@@ -105,6 +105,12 @@ Grants a permission on a scope to a role. Granting again on the same scope repla
 Granted Read on 'dataskope/collector/' to collector-reader
 ```
 
+A scope is up to 256 characters of letters, digits, `.`, `_` and `-` in `/`-separated segments; anything else is rejected. The empty scope covers **every** secret in the vault, so it cannot be reached by an empty `--scope` (a shell that expands an unset variable away would grant it by accident) — ask for it explicitly:
+
+```
+minivault role grant break-glass --all --permission write
+```
+
 ### `minivault role list`
 
 Lists every role and its rules, one line per role.
@@ -142,6 +148,15 @@ Assigns an existing role to an existing client. Assigning a role the client alre
 Assigned role collector-reader to dataskope-collector
 ```
 
+### `minivault client disable <id>` / `minivault client enable <id>`
+
+Turns a client off without deleting it, and back on. A disabled client cannot obtain new tokens; a token it already holds keeps working until it expires (15 minutes by default). Use `disable` for a suspected compromise, `remove` when the client is gone for good.
+
+```
+Client disabled: dataskope-collector
+Client enabled: dataskope-collector
+```
+
 ### `minivault client list`
 
 Lists every client, whether it is enabled, and its roles.
@@ -163,7 +178,7 @@ The last command prints the client's secret once. Copy it into the consuming ser
 
 ### Audit trail
 
-Every command above writes an audit row with client id `cli`. The action names are `client.add`, `client.remove`, `client.assign`, `role.add`, `role.remove`, `role.grant`.
+Every command above writes an audit row with client id `cli`. The action names are `client.add`, `client.remove`, `client.assign`, `client.enable`, `client.disable`, `role.add`, `role.remove`, `role.grant`.
 
 ## Master key providers
 
@@ -190,6 +205,29 @@ TLS/HTTPS configuration ships with the installer and container images (a later r
 | `GET` | `/v1/health` | none | 200 | — |
 
 Any endpoint can also return `vault_unavailable` (503, the master key or database is temporarily unreachable) or `internal_error` (500, unexpected failure); both are logged server-side.
+
+`GET /v1/secrets?prefix=` validates the prefix: at most 256 characters of letters, digits, `.`, `_`, `-` and `/`. Anything else is `invalid_request` (400). An empty prefix is allowed and means "the whole vault", which needs a rule whose scope is the empty scope.
+
+`If-None-Match` on `GET /v1/secrets/{name}` is a proper entity-tag list: `"3"`, `W/"3"` (weak tags compare equal — the vault has one representation per version) and `*` all produce a 304, and the 304 carries the current `ETag` header just as the 200 would.
+
+### Other status codes
+
+These come from the pipeline rather than from an endpoint, and carry the same JSON error shape:
+
+| Status | `error` | When |
+|---|---|---|
+| `405` | `invalid_request` | The path exists but not for that method, e.g. `POST /v1/secrets/{name}`. |
+| `415` | `invalid_request` | The request body is not `application/json`. |
+| `429` | (no body) | More than `Token:LoginRateLimitPerMinute` requests a minute reached `/v1/auth/token`. The default is 30, counted per server over a fixed one-minute window; the other endpoints are not rate-limited because they already need a token. |
+| `499` | (no body) | The client closed the connection before a response was produced. Nothing is sent; the row exists only in the access log. |
+
+### Audit trail
+
+Every request that reaches an endpoint writes a row: `token`, `secret.read`, `secret.write`, `secret.delete`, `secret.list`. Failed attempts are recorded too, with `Success = 0` and the reason in `Detail`; for `secret.list` the requested prefix is the detail and the secret name is left empty.
+
+A request that is rejected by the bearer-token check never reaches an endpoint, so it is audited separately as **`token.rejected`** with client id `(anonymous)`, the caller's IP, and the token handler's reason (or `missing or invalid bearer token`). Watch this action together with failed `token` rows: both are what credential guessing and token replay look like from the outside.
+
+Audit rows are written on their own database connection, independent of the request's own work, so a failed or rolled-back write still leaves its audit row behind.
 
 ### Error codes
 
