@@ -9,8 +9,7 @@ public sealed class SecretCipher(DataKeyRing ring)
 {
     public (byte[] Ciphertext, int DekVersion) Encrypt(string name, byte[] value)
     {
-        var version = ring.ActiveVersion;
-        var dek = ring.GetDek(version);
+        var (version, dek) = ring.GetActive();
         try { return (AeadCipher.Encrypt(value, dek, Encoding.UTF8.GetBytes(name)), version); }
         finally { Array.Clear(dek); }
     }

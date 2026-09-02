@@ -174,11 +174,13 @@ namespace MiniVault.Server.Data.Migrations
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RoleName", "Scope");
+                    b.HasIndex("RoleName", "Scope")
+                        .IsUnique();
 
                     b.ToTable("RoleRules", (string)null);
                 });
@@ -187,7 +189,8 @@ namespace MiniVault.Server.Data.Migrations
                 {
                     b.Property<string>("Name")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.Property<byte[]>("Ciphertext")
                         .IsRequired()

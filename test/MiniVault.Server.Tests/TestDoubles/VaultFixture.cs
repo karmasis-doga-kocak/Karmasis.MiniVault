@@ -40,14 +40,24 @@ public sealed class VaultFixture : IAsyncDisposable
         services.AddSingleton<IMasterKeyProvider>(provider);
         var serviceProvider = services.BuildServiceProvider();
 
-        await using (var scope = serviceProvider.CreateAsyncScope())
+        try
         {
-            var initializer = scope.ServiceProvider.GetRequiredService<VaultInitializer>();
-            await initializer.InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None);
-        }
+            await using (var scope = serviceProvider.CreateAsyncScope())
+            {
+                var initializer = scope.ServiceProvider.GetRequiredService<VaultInitializer>();
+                await initializer.InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None);
+            }
 
-        var ring = serviceProvider.GetRequiredService<DataKeyRing>();
-        await ring.LoadAsync(CancellationToken.None);
+            var ring = serviceProvider.GetRequiredService<DataKeyRing>();
+            await ring.LoadAsync(CancellationToken.None);
+        }
+        catch
+        {
+            // Nothing owns the LocalDB database yet, so a failure here would leak it for the rest of the run.
+            await serviceProvider.DisposeAsync();
+            await db.DisposeAsync();
+            throw;
+        }
 
         return new VaultFixture { Db = db, Provider = provider, ServiceProvider = serviceProvider };
     }

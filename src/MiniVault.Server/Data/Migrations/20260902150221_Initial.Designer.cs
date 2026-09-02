@@ -12,7 +12,7 @@ using MiniVault.Server.Data;
 namespace MiniVault.Server.Data.Migrations
 {
     [DbContext(typeof(MiniVaultDbContext))]
-    [Migration("20260902132524_Initial")]
+    [Migration("20260902150221_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -177,11 +177,13 @@ namespace MiniVault.Server.Data.Migrations
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RoleName", "Scope");
+                    b.HasIndex("RoleName", "Scope")
+                        .IsUnique();
 
                     b.ToTable("RoleRules", (string)null);
                 });
@@ -190,7 +192,8 @@ namespace MiniVault.Server.Data.Migrations
                 {
                     b.Property<string>("Name")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.Property<byte[]>("Ciphertext")
                         .IsRequired()

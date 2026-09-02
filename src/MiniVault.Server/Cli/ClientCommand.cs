@@ -49,6 +49,28 @@ public static class ClientCommand
             return 0;
         });
 
+        var enable = new Command("enable", "Re-enable a disabled client.");
+        enable.Arguments.Add(id);
+        enable.SetAction(async (r, ct) =>
+        {
+            using var scope = services().CreateScope();
+            await scope.ServiceProvider.GetRequiredService<ClientDirectory>().SetEnabledAsync(r.GetValue(id)!, true, ct);
+            await scope.ServiceProvider.GetRequiredService<AuditWriter>().WriteAsync(VaultInitializer.AuditClientId, "client.enable", null, true, null, r.GetValue(id), ct);
+            await output.WriteLineAsync($"Client enabled: {r.GetValue(id)}");
+            return 0;
+        });
+
+        var disable = new Command("disable", "Disable a client. It can no longer obtain tokens; tokens it already holds work until they expire.");
+        disable.Arguments.Add(id);
+        disable.SetAction(async (r, ct) =>
+        {
+            using var scope = services().CreateScope();
+            await scope.ServiceProvider.GetRequiredService<ClientDirectory>().SetEnabledAsync(r.GetValue(id)!, false, ct);
+            await scope.ServiceProvider.GetRequiredService<AuditWriter>().WriteAsync(VaultInitializer.AuditClientId, "client.disable", null, true, null, r.GetValue(id), ct);
+            await output.WriteLineAsync($"Client disabled: {r.GetValue(id)}");
+            return 0;
+        });
+
         var list = new Command("list", "List clients and their roles.");
         list.SetAction(async (r, ct) =>
         {
@@ -58,7 +80,8 @@ public static class ClientCommand
             return 0;
         });
 
-        client.Subcommands.Add(add); client.Subcommands.Add(remove); client.Subcommands.Add(assign); client.Subcommands.Add(list);
+        client.Subcommands.Add(add); client.Subcommands.Add(remove); client.Subcommands.Add(assign);
+        client.Subcommands.Add(enable); client.Subcommands.Add(disable); client.Subcommands.Add(list);
         return client;
     }
 }

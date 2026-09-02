@@ -23,8 +23,10 @@ builder.Services.AddHostedService<VaultStartupCheck>();
 
 var app = builder.Build();
 app.UseMiniVaultErrorHandling();
+app.UseMiniVaultStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapMiniVaultApi();
 app.Run();
 return 0;

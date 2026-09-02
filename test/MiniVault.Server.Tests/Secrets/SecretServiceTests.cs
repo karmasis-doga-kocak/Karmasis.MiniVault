@@ -86,22 +86,22 @@ public class SecretServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Set_InvalidName_ThrowsArgumentException()
+    public async Task Set_InvalidName_ThrowsValidationException()
     {
         using var scope = _fixture.CreateScope();
         var sut = scope.ServiceProvider.GetRequiredService<SecretService>();
 
-        await Should.ThrowAsync<ArgumentException>(() => sut.SetAsync("bad name", "v"u8.ToArray(), null, "tester", CancellationToken.None));
+        await Should.ThrowAsync<SecretValidationException>(() => sut.SetAsync("bad name", "v"u8.ToArray(), null, "tester", CancellationToken.None));
     }
 
     [Fact]
-    public async Task Set_TooLarge_ThrowsArgumentException()
+    public async Task Set_TooLarge_ThrowsValidationException()
     {
         using var scope = _fixture.CreateScope();
         var sut = scope.ServiceProvider.GetRequiredService<SecretService>();
         var value = new byte[SecretService.MaxValueBytes + 1];
 
-        await Should.ThrowAsync<ArgumentException>(() => sut.SetAsync("a/b", value, null, "tester", CancellationToken.None));
+        await Should.ThrowAsync<SecretValidationException>(() => sut.SetAsync("a/b", value, null, "tester", CancellationToken.None));
     }
 
     [Fact]
@@ -127,6 +127,19 @@ public class SecretServiceTests : IAsyncLifetime
 
         var sutB = scopeB.ServiceProvider.GetRequiredService<SecretService>();
         await Should.ThrowAsync<SecretConflictException>(() => sutB.SetAsync("a/b", "v3"u8.ToArray(), null, "tester", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Get_CaseVariant_NotFound()
+    {
+        using var scope = _fixture.CreateScope();
+        var sut = scope.ServiceProvider.GetRequiredService<SecretService>();
+        await sut.SetAsync("a/b", "v1"u8.ToArray(), null, "tester", CancellationToken.None);
+
+        // The stored name is "a/b"; "a/B" is a different secret, and it does not exist.
+        await Should.ThrowAsync<SecretNotFoundException>(() => sut.GetAsync("a/B", CancellationToken.None));
+        (await sut.GetVersionAsync("a/B", CancellationToken.None)).ShouldBeNull();
+        (await sut.ListAsync("a/B", CancellationToken.None)).ShouldBeEmpty();
     }
 
     [Fact]

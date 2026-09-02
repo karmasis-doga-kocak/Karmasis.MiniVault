@@ -22,14 +22,18 @@ public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider 
 
     public bool IsLoaded => _snapshot is not null;
     public int ActiveVersion => Current().ActiveVersion;
-    public byte[] ActiveDek => GetDek(ActiveVersion);
+    public byte[] ActiveDek => GetActive().Dek;
     public byte[] JwtSigningKey => (byte[])Current().JwtKey.Clone();
 
-    public byte[] GetDek(int version)
+    /// <summary>The active version and its DEK from a single snapshot read, so a concurrent reload cannot
+    /// pair a version number with a different version's key.</summary>
+    public (int Version, byte[] Dek) GetActive()
     {
         var snap = Current();
-        return snap.Deks.TryGetValue(version, out var dek) ? (byte[])dek.Clone() : throw new KeyNotFoundException($"No data key with version {version}.");
+        return (snap.ActiveVersion, Copy(snap, snap.ActiveVersion));
     }
+
+    public byte[] GetDek(int version) => Copy(Current(), version);
 
     /// <summary>Returns the DEK for a version, reloading from the database once if it is unknown.</summary>
     public async Task<byte[]> GetDekAsync(int version, CancellationToken ct)
@@ -56,6 +60,9 @@ public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider 
     }
 
     private Snapshot Current() => _snapshot ?? throw new VaultNotInitializedException();
+
+    private static byte[] Copy(Snapshot snap, int version) =>
+        snap.Deks.TryGetValue(version, out var dek) ? (byte[])dek.Clone() : throw new UnknownDataKeyException(version);
 
     private async Task<Snapshot> BuildSnapshotAsync(CancellationToken ct)
     {

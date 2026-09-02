@@ -108,6 +108,53 @@ public class ClientRoleCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RoleGrant_EmptyScope_RequiresAll()
+    {
+        await Run("role", "add", "r1");
+
+        var (code, output) = await Run("role", "grant", "r1", "--scope", "", "--permission", "read");
+
+        code.ShouldBe(1);
+        output.ShouldContain("--all");
+
+        (await Run("role", "grant", "r1", "--all", "--permission", "read")).Code.ShouldBe(0);
+        (await Run("role", "list")).Output.ShouldContain("r1: =Read");
+    }
+
+    [Fact]
+    public async Task RoleGrant_InvalidScope_IsError()
+    {
+        await Run("role", "add", "r1");
+
+        var (code, output) = await Run("role", "grant", "r1", "--scope", "dataskope/%", "--permission", "read");
+
+        code.ShouldBe(1);
+        output.ShouldContain("Error:");
+        (await Run("role", "list")).Output.ShouldContain("r1: (no rules)");
+    }
+
+    [Fact]
+    public async Task ClientDisable_ThenAuthenticateFails_AndEnableRestores()
+    {
+        await Run("role", "add", "r1");
+        var (_, addOutput) = await Run("client", "add", "c1", "--role", "r1");
+        var secret = Line(addOutput, "Client secret:");
+
+        (await Run("client", "disable", "c1")).Code.ShouldBe(0);
+        await using (var disabled = _db.CreateContext())
+            (await new ClientDirectory(disabled, TimeProvider.System).AuthenticateAsync("c1", secret, CancellationToken.None)).ShouldBeNull();
+        (await Run("client", "list")).Output.ShouldContain("c1 [disabled]");
+
+        (await Run("client", "enable", "c1")).Code.ShouldBe(0);
+        await using (var enabled = _db.CreateContext())
+            (await new ClientDirectory(enabled, TimeProvider.System).AuthenticateAsync("c1", secret, CancellationToken.None)).ShouldNotBeNull();
+
+        await using var audit = _db.CreateContext();
+        (await audit.AuditLogs.CountAsync(a => a.Action == "client.disable")).ShouldBe(1);
+        (await audit.AuditLogs.CountAsync(a => a.Action == "client.enable")).ShouldBe(1);
+    }
+
+    [Fact]
     public async Task ClientRemove_ThenAuthenticateFails()
     {
         await Run("role", "add", "r1");

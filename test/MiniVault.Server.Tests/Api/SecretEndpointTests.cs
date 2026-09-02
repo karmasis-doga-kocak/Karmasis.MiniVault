@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using MiniVault.Contracts;
+using MiniVault.Server.Secrets;
 
 namespace MiniVault.Server.Tests.Api;
 
@@ -30,6 +32,136 @@ public class SecretEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTest
         conditional.Headers.TryAddWithoutValidation("If-None-Match", "\"1\"");
         var notModified = await collector.SendAsync(conditional);
         notModified.StatusCode.ShouldBe(HttpStatusCode.NotModified);
+        notModified.Headers.ETag!.Tag.ShouldBe("\"1\"");
+    }
+
+    [Fact]
+    public async Task Get_WeakAndWildcardIfNoneMatch_304()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+        const string name = "dataskope/conditional";
+        await webui.PutAsJsonAsync($"/v1/secrets/{name}", new SetSecretRequest { Value = Convert.ToBase64String("v"u8.ToArray()) });
+
+        var weak = new HttpRequestMessage(HttpMethod.Get, $"/v1/secrets/{name}");
+        weak.Headers.TryAddWithoutValidation("If-None-Match", "W/\"1\"");
+        (await webui.SendAsync(weak)).StatusCode.ShouldBe(HttpStatusCode.NotModified);
+
+        var any = new HttpRequestMessage(HttpMethod.Get, $"/v1/secrets/{name}");
+        any.Headers.TryAddWithoutValidation("If-None-Match", "*");
+        (await webui.SendAsync(any)).StatusCode.ShouldBe(HttpStatusCode.NotModified);
+
+        var other = new HttpRequestMessage(HttpMethod.Get, $"/v1/secrets/{name}");
+        other.Headers.TryAddWithoutValidation("If-None-Match", "\"7\"");
+        (await webui.SendAsync(other)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Put_MixedCaseNames_AreDistinctSecrets()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+        var lower = "lower-bytes"u8.ToArray();
+        var upper = "UPPER-BYTES"u8.ToArray();
+
+        var putLower = await webui.PutAsJsonAsync("/v1/secrets/dataskope/case/x", new SetSecretRequest { Value = Convert.ToBase64String(lower) });
+        var putUpper = await webui.PutAsJsonAsync("/v1/secrets/dataskope/case/X", new SetSecretRequest { Value = Convert.ToBase64String(upper) });
+
+        putLower.StatusCode.ShouldBe(HttpStatusCode.OK);
+        putUpper.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await putLower.Content.ReadFromJsonAsync<SetSecretResponse>())!.Version.ShouldBe(1);
+        (await putUpper.Content.ReadFromJsonAsync<SetSecretResponse>())!.Version.ShouldBe(1);
+
+        var getLower = await webui.GetAsync("/v1/secrets/dataskope/case/x");
+        var getUpper = await webui.GetAsync("/v1/secrets/dataskope/case/X");
+        Convert.FromBase64String((await getLower.Content.ReadFromJsonAsync<SecretResponse>())!.Value).ShouldBe(lower);
+        Convert.FromBase64String((await getUpper.Content.ReadFromJsonAsync<SecretResponse>())!.Value).ShouldBe(upper);
+    }
+
+    [Fact]
+    public async Task Put_Conflict_409_IsAudited()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+        const string name = "dataskope/conflicted";
+        await webui.PutAsJsonAsync($"/v1/secrets/{name}", new SetSecretRequest { Value = Convert.ToBase64String("v1"u8.ToArray()) });
+
+        // The hook runs inside the request's SetAsync, after it has loaded the row and before it saves. The competing
+        // write below bumps the row's RowVersion, so the request's own save loses the race exactly as it would if a
+        // second server had written between those two steps.
+        HttpResponseMessage response;
+        SecretService.BeforeSaveHook = async writing =>
+        {
+            if (writing != name) return;
+            SecretService.BeforeSaveHook = null; // the competing write must not re-enter the hook
+            using var scope = fixture.Factory.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<SecretService>()
+                .SetAsync(name, "v2"u8.ToArray(), null, "competitor", CancellationToken.None);
+        };
+        try
+        {
+            response = await webui.PutAsJsonAsync($"/v1/secrets/{name}", new SetSecretRequest { Value = Convert.ToBase64String("v3"u8.ToArray()) });
+        }
+        finally
+        {
+            SecretService.BeforeSaveHook = null;
+        }
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var conflictBody = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        conflictBody!.Error.ShouldBe(ErrorResponse.Conflict);
+
+        // The audit row proves the failed write is recorded: it only survives because AuditWriter no longer shares
+        // the request's DbContext, whose pending (and losing) change would otherwise be saved along with it.
+        var audits = await fixture.AuditAsync();
+        audits.ShouldContain(a => a.Action == "secret.write" && !a.Success && a.SecretName == name
+            && a.Detail != null && a.Detail.Contains(nameof(SecretConflictException)));
+    }
+
+    [Fact]
+    public async Task List_LongPrefix_400()
+    {
+        var collector = await fixture.ClientWithTokenAsync("collector");
+
+        var response = await collector.GetAsync("/v1/secrets?prefix=" + new string('a', 900));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+    }
+
+    [Fact]
+    public async Task List_InvalidPrefixChars_400()
+    {
+        var collector = await fixture.ClientWithTokenAsync("collector");
+
+        var response = await collector.GetAsync("/v1/secrets?prefix=dataskope%2F%25");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+    }
+
+    [Fact]
+    public async Task Put_NonJsonContentType_415_HasBody()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+        var content = new StringContent("not json", Encoding.UTF8, "text/plain");
+
+        var response = await webui.PutAsync("/v1/secrets/dataskope/unsupported-media", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+        body.Detail.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Post_OnSecret_405_HasBody()
+    {
+        var webui = await fixture.ClientWithTokenAsync("webui");
+
+        var response = await webui.PostAsJsonAsync("/v1/secrets/dataskope/method", new SetSecretRequest { Value = Convert.ToBase64String("v"u8.ToArray()) });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Error.ShouldBe(ErrorResponse.InvalidRequest);
+        body.Detail.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -42,6 +174,9 @@ public class SecretEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTest
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         body!.Error.ShouldBe(ErrorResponse.Unauthorized);
+
+        var audits = await fixture.AuditAsync();
+        audits.ShouldContain(a => a.Action == "token.rejected" && a.ClientId == "(anonymous)" && !a.Success);
     }
 
     [Fact]

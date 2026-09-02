@@ -75,6 +75,17 @@ public sealed partial class ClientDirectory(MiniVaultDbContext db, TimeProvider 
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Enables or disables a client. A disabled client cannot obtain new tokens; tokens it already holds
+    /// keep working until they expire.</summary>
+    public async Task SetEnabledAsync(string clientId, bool enabled, CancellationToken ct)
+    {
+        var client = await db.Clients.SingleOrDefaultAsync(c => c.ClientId == clientId, ct)
+            ?? throw new ArgumentException($"Client '{clientId}' does not exist.", nameof(clientId));
+        if (client.Enabled == enabled) return;
+        client.Enabled = enabled;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<IReadOnlyList<(string ClientId, bool Enabled, IReadOnlyList<string> Roles)>> ListClientsAsync(CancellationToken ct)
     {
         var clients = await db.Clients.AsNoTracking().Include(c => c.Roles).OrderBy(c => c.ClientId).ToListAsync(ct);

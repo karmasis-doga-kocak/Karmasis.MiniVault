@@ -38,7 +38,7 @@ public class DataKeyRingTests : IAsyncLifetime
         ring.ActiveVersion.ShouldBe(1);
         ring.ActiveDek.Length.ShouldBe(32);
         ring.GetDek(1).ShouldBe(ring.ActiveDek);
-        Should.Throw<KeyNotFoundException>(() => ring.GetDek(99));
+        Should.Throw<UnknownDataKeyException>(() => ring.GetDek(99));
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class DataKeyRingTests : IAsyncLifetime
 
         dek2.Length.ShouldBe(32);
         ring.ActiveVersion.ShouldBe(2);
-        await Should.ThrowAsync<KeyNotFoundException>(() => ring.GetDekAsync(99, CancellationToken.None));
+        await Should.ThrowAsync<UnknownDataKeyException>(() => ring.GetDekAsync(99, CancellationToken.None));
     }
 
     [Fact]

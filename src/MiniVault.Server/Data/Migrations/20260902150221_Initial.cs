@@ -95,7 +95,7 @@ namespace MiniVault.Server.Data.Migrations
                 name: "Secrets",
                 columns: table => new
                 {
-                    Name = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false, collation: "Latin1_General_100_BIN2"),
                     Ciphertext = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
                     DekVersion = table.Column<int>(type: "int", nullable: false),
                     ContentType = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
@@ -146,7 +146,7 @@ namespace MiniVault.Server.Data.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     RoleName = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    Scope = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    Scope = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false, collation: "Latin1_General_100_BIN2"),
                     Permission = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false)
                 },
                 constraints: table =>
@@ -180,7 +180,8 @@ namespace MiniVault.Server.Data.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_RoleRules_RoleName_Scope",
                 table: "RoleRules",
-                columns: new[] { "RoleName", "Scope" });
+                columns: new[] { "RoleName", "Scope" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Secrets_DekVersion",

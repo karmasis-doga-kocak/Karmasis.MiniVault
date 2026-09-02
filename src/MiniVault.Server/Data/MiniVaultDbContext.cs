@@ -39,7 +39,10 @@ public sealed class MiniVaultDbContext(DbContextOptions<MiniVaultDbContext> opti
         {
             e.ToTable("Secrets");
             e.HasKey(x => x.Name);
-            e.Property(x => x.Name).HasMaxLength(Secret.MaxNameLength);
+            // Secret names are case-sensitive: SecretCipher binds the requested name as AES-GCM associated data and
+            // Authorizer compares scopes ordinally, so a case-insensitive database collation would let "a/B" resolve
+            // the row stored as "a/b" (and then fail to decrypt, or bypass a scope check). BIN2 keeps SQL Server in step.
+            e.Property(x => x.Name).HasMaxLength(Secret.MaxNameLength).UseCollation("Latin1_General_100_BIN2");
             e.Property(x => x.Ciphertext).IsRequired();
             e.Property(x => x.ContentType).HasMaxLength(128);
             e.Property(x => x.UpdatedBy).HasMaxLength(128);
@@ -71,9 +74,9 @@ public sealed class MiniVaultDbContext(DbContextOptions<MiniVaultDbContext> opti
             e.ToTable("RoleRules");
             e.HasKey(x => x.Id);
             e.Property(x => x.RoleName).HasMaxLength(128);
-            e.Property(x => x.Scope).HasMaxLength(Secret.MaxNameLength);
+            e.Property(x => x.Scope).HasMaxLength(Secret.MaxNameLength).UseCollation("Latin1_General_100_BIN2");
             e.Property(x => x.Permission).HasConversion<string>().HasMaxLength(16);
-            e.HasIndex(x => new { x.RoleName, x.Scope });
+            e.HasIndex(x => new { x.RoleName, x.Scope }).IsUnique();
         });
 
         b.Entity<ClientRole>(e =>

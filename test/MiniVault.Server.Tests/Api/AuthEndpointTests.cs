@@ -55,8 +55,49 @@ public class AuthEndpointTests(ApiTestFixture fixture) : IClassFixture<ApiTestFi
         var response = await http.PostAsJsonAsync("/v1/auth/token", new TokenRequest { ClientId = "ghost", ClientSecret = "whatever" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Error.ShouldBe(ErrorResponse.Unauthorized);
         var audits = await fixture.AuditAsync();
         audits.ShouldContain(a => a.ClientId == "ghost" && a.Action == "token" && !a.Success);
+    }
+
+    [Fact]
+    public async Task Token_AttemptedClientId_IsSanitizedInAudit()
+    {
+        var http = fixture.Factory.CreateClient();
+
+        var response = await http.PostAsJsonAsync("/v1/auth/token", new TokenRequest { ClientId = "gh<script>ost", ClientSecret = "whatever" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        var audits = await fixture.AuditAsync();
+        audits.ShouldContain(a => a.Action == "token" && !a.Success && a.ClientId == "ghscriptost");
+    }
+
+    [Fact]
+    public async Task Token_OverRateLimit_Returns429()
+    {
+        await using var db = await TestDatabase.CreateAsync(migrate: false);
+        var provider = new InMemoryMasterKeyProvider();
+        await using (var ctx = db.CreateContext())
+            await new VaultInitializer(ctx, provider, TimeProvider.System).InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None);
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:MiniVault", db.ConnectionString);
+            b.UseSetting("Token:LoginRateLimitPerMinute", "5");
+            b.ConfigureTestServices(s => s.AddSingleton<IMasterKeyProvider>(provider));
+        });
+
+        var http = factory.CreateClient();
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 6; i++)
+        {
+            var attempt = await http.PostAsJsonAsync("/v1/auth/token", new TokenRequest { ClientId = "ghost", ClientSecret = "whatever" });
+            statuses.Add(attempt.StatusCode);
+        }
+
+        statuses.Take(5).ShouldAllBe(status => status == HttpStatusCode.Unauthorized);
+        statuses[5].ShouldBe(HttpStatusCode.TooManyRequests);
     }
 
     [Fact]
