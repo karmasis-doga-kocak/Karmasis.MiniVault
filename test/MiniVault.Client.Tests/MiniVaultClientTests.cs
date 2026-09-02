@@ -76,19 +76,6 @@ public class MiniVaultClientTests : IDisposable
 
     private IReadOnlyList<CachedSecret> OnDisk() => new DiskCache(_dir, ClientId, ClientSecret, null).Load();
 
-    /// <summary>Polls <paramref name="condition"/> until it holds, or fails the test when the wait runs out.</summary>
-    private static async Task WaitUntilAsync(Func<bool> condition, string because)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < RefreshWait)
-        {
-            if (condition()) return;
-            await Task.Delay(25);
-        }
-
-        throw new Shouldly.ShouldAssertException($"Timed out after {RefreshWait} waiting until {because}.");
-    }
-
     /// <summary>A handler that fails every request the way an unreachable server does.</summary>
     private sealed class OfflineHandler : HttpMessageHandler
     {
@@ -493,6 +480,12 @@ public class MiniVaultClientTests : IDisposable
             ? TokenResponse200()
             : StubHandler.JsonResponse(HttpStatusCode.NotFound, new ErrorResponse { Error = ErrorResponse.NotFound });
 
+        var notFoundDequeued = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.OnResponse = response =>
+        {
+            if (response.StatusCode == HttpStatusCode.NotFound) notFoundDequeued.TrySetResult(true);
+        };
+
         var logs = new List<string>();
         var options = Options(cacheDirectory: _dir, refreshInterval: RefreshTick);
         options.Log = line => { lock (logs) logs.Add(line); };
@@ -502,7 +495,17 @@ public class MiniVaultClientTests : IDisposable
         await client.GetSecretAsync("a");
         OnDisk().ShouldNotBeEmpty();
 
-        await WaitUntilAsync(() => OnDisk().Count == 0, "the background refresh has dropped the deleted secret from disk");
+        var signalled = await Task.WhenAny(notFoundDequeued.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        signalled.ShouldBe(notFoundDequeued.Task);
+
+        // The 404 has been received; the refresh pass still has to evict the entry from memory and rewrite the
+        // disk cache, so poll rather than assert immediately.
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(3) && OnDisk().Count != 0)
+        {
+            await Task.Delay(50);
+        }
+        OnDisk().ShouldBeEmpty();
 
         // Nothing is left in memory either, so the next read goes to the server and surfaces the 404 rather
         // than handing out a secret the server no longer has.
@@ -520,6 +523,12 @@ public class MiniVaultClientTests : IDisposable
             ? TokenResponse200()
             : StubHandler.JsonResponse(HttpStatusCode.Forbidden, new ErrorResponse { Error = ErrorResponse.Forbidden });
 
+        var forbiddenDequeued = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.OnResponse = response =>
+        {
+            if (response.StatusCode == HttpStatusCode.Forbidden) forbiddenDequeued.TrySetResult(true);
+        };
+
         var logs = new List<string>();
         var options = Options(cacheDirectory: _dir, refreshInterval: RefreshTick);
         options.Log = line => { lock (logs) logs.Add(line); };
@@ -529,7 +538,17 @@ public class MiniVaultClientTests : IDisposable
         await client.GetSecretAsync("a");
         OnDisk().ShouldNotBeEmpty();
 
-        await WaitUntilAsync(() => OnDisk().Count == 0, "the background refresh has dropped the forbidden secret from disk");
+        var signalled = await Task.WhenAny(forbiddenDequeued.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        signalled.ShouldBe(forbiddenDequeued.Task);
+
+        // The 403 has been received; the refresh pass still has to evict the entry from memory and rewrite the
+        // disk cache, so poll rather than assert immediately.
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(3) && OnDisk().Count != 0)
+        {
+            await Task.Delay(50);
+        }
+        OnDisk().ShouldBeEmpty();
 
         await Should.ThrowAsync<MiniVaultForbiddenException>(() => client.GetSecretAsync("a"));
         lock (logs) logs.ShouldContain(l => l.Contains("access to it was revoked"));
