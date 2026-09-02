@@ -5,7 +5,14 @@ using MiniVault.Server.Vault;
 if (CliApp.IsCliInvocation(args))
     return await CliApp.RunAsync(args, Console.Out);
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    // A Windows service starts with an arbitrary working directory (e.g. C:\Windows\System32); anchor the content
+    // root to the binary's own folder so relative configuration files resolve. Interactive runs keep the default
+    // (current directory), matching the documented WindowsServiceHelpers.IsWindowsService() pattern.
+    ContentRootPath = Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null,
+});
 builder.Configuration.AddMiniVaultConfiguration(args);
 builder.Host.UseWindowsService();
 builder.Services.AddMiniVaultCore(builder.Configuration);

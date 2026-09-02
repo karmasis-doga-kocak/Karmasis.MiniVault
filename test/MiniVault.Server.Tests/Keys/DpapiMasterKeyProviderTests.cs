@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using MiniVault.Server.Keys;
 
 namespace MiniVault.Server.Tests.Keys;
@@ -69,5 +70,22 @@ public class DpapiMasterKeyProviderTests : IDisposable
         using var handle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
 
         Should.Throw<MasterKeyUnavailableException>(() => provider.GetKek());
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Store_WritesFileWithProtectedAcl_NoUsersGroup()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var path = Path.Combine(_dir, "masterkey.bin");
+        var provider = new DpapiMasterKeyProvider(path);
+        provider.Store(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
+
+        var security = new FileInfo(path).GetAccessControl();
+        security.AreAccessRulesProtected.ShouldBeTrue();
+        var rules = security.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier)).Cast<FileSystemAccessRule>().ToList();
+        rules.ShouldNotContain(r => ((System.Security.Principal.SecurityIdentifier)r.IdentityReference).IsWellKnown(System.Security.Principal.WellKnownSidType.BuiltinUsersSid));
+        rules.ShouldContain(r => ((System.Security.Principal.SecurityIdentifier)r.IdentityReference).IsWellKnown(System.Security.Principal.WellKnownSidType.LocalSystemSid));
+        provider.GetKek().Length.ShouldBe(32);   // current user can still read it back
     }
 }

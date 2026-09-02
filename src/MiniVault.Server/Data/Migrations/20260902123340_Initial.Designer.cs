@@ -12,7 +12,7 @@ using MiniVault.Server.Data;
 namespace MiniVault.Server.Data.Migrations
 {
     [DbContext(typeof(MiniVaultDbContext))]
-    [Migration("20260902112402_Initial")]
+    [Migration("20260902123340_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -131,7 +131,9 @@ namespace MiniVault.Server.Data.Migrations
 
                     b.HasKey("Version");
 
-                    b.HasIndex("IsActive");
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.ToTable("DataKeys", (string)null);
                 });

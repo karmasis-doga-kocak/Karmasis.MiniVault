@@ -25,4 +25,15 @@ public class MigrationTests
         tables.ShouldContain("AuditLog");
         (await ctx.Database.GetPendingMigrationsAsync()).ShouldBeEmpty();
     }
+
+    [Fact]
+    public async Task DataKeys_AllowsOnlyOneActiveKey()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        await using var ctx = db.CreateContext();
+        ctx.DataKeys.Add(new MiniVault.Server.Data.Entities.DataKey { Version = 1, WrappedByMaster = [1], WrappedByRecovery = [1], IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+        ctx.DataKeys.Add(new MiniVault.Server.Data.Entities.DataKey { Version = 2, WrappedByMaster = [1], WrappedByRecovery = [1], IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+
+        await Should.ThrowAsync<DbUpdateException>(() => ctx.SaveChangesAsync());
+    }
 }

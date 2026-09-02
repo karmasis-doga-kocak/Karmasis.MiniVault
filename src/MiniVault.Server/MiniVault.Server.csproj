@@ -5,7 +5,6 @@
     <AssemblyName>minivault</AssemblyName>
     <RootNamespace>MiniVault.Server</RootNamespace>
     <UserSecretsId>minivault-server</UserSecretsId>
-    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>

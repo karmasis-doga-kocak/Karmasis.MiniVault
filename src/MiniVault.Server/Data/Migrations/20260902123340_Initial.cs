@@ -171,7 +171,9 @@ namespace MiniVault.Server.Data.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_DataKeys_IsActive",
                 table: "DataKeys",
-                column: "IsActive");
+                column: "IsActive",
+                unique: true,
+                filter: "[IsActive] = 1");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RoleRules_RoleName_Scope",

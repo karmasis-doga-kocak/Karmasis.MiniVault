@@ -20,6 +20,7 @@ public sealed class VaultRecovery(MiniVaultDbContext db, IMasterKeyProvider prov
         { throw new VaultException($"Invalid recovery input: {ex.Message}", ex); }
 
         var keys = await db.DataKeys.ToListAsync(ct);
+        if (keys.Count == 0) throw new VaultException("The vault has no data keys; nothing to recover.");
         var master = options.NewMasterKeyPassword is null
             ? MasterKeyMaterial.Random()
             : MasterKeyMaterial.FromPassword(options.NewMasterKeyPassword);
@@ -36,7 +37,7 @@ public sealed class VaultRecovery(MiniVaultDbContext db, IMasterKeyProvider prov
                 }
                 meta.RecoveryKeyWrappedByMaster = KeyWrapper.Wrap(recoveryKey, master.Kek);
             }
-            catch (CryptographicException ex)
+            catch (Exception ex) when (ex is CryptographicException or ArgumentException)
             {
                 throw new VaultException("The recovery key does not unwrap the stored data keys. Wrong recovery key or shares.", ex);
             }
@@ -94,7 +95,7 @@ public sealed class VaultRecovery(MiniVaultDbContext db, IMasterKeyProvider prov
             await db.SaveChangesAsync(ct);
             return newKey.Version;
         }
-        catch (CryptographicException ex)
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException)
         {
             throw new VaultException("The master key does not unwrap the stored recovery key.", ex);
         }

@@ -32,7 +32,7 @@ public sealed class MiniVaultDbContext(DbContextOptions<MiniVaultDbContext> opti
             e.Property(x => x.Version).ValueGeneratedNever();
             e.Property(x => x.WrappedByMaster).IsRequired();
             e.Property(x => x.WrappedByRecovery).IsRequired();
-            e.HasIndex(x => x.IsActive);
+            e.HasIndex(x => x.IsActive).IsUnique().HasFilter("[IsActive] = 1");
         });
 
         b.Entity<Secret>(e =>

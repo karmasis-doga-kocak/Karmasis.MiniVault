@@ -15,6 +15,8 @@ public sealed class VaultInitializer(MiniVaultDbContext db, IMasterKeyProvider p
         await db.Database.MigrateAsync(ct);
         if (await db.VaultMetadata.AnyAsync(ct))
             throw new VaultAlreadyInitializedException();
+        if (provider.CanStore && provider.Exists() && !options.Force)
+            throw new VaultException($"A master key already exists in the {provider.Name} provider. Another vault on this host would lose its key. Pass --force to overwrite it.");
 
         var master = options.MasterKeyPassword is null
             ? MasterKeyMaterial.Random()

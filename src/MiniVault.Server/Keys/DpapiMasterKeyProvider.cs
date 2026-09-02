@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using MiniVault.Server.Hosting;
 
@@ -15,9 +16,10 @@ public sealed class DpapiMasterKeyProvider : IMasterKeyProvider
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("The Dpapi master key provider requires Windows. Use MasterKey:Provider=Environment on Linux.");
-        FilePath = string.IsNullOrWhiteSpace(filePath)
+        var resolved = string.IsNullOrWhiteSpace(filePath)
             ? Path.Combine(MiniVaultConfiguration.MachineConfigDirectory, DefaultFileName)
             : filePath;
+        FilePath = Path.GetFullPath(resolved);
     }
 
     public string FilePath { get; }
@@ -46,10 +48,27 @@ public sealed class DpapiMasterKeyProvider : IMasterKeyProvider
     public void Store(byte[] kek)
     {
         MasterKey.ValidateSize(kek, nameof(kek));
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        var directory = Path.GetDirectoryName(FilePath)!;
+        var dirInfo = new DirectoryInfo(directory);
+        var directoryExisted = dirInfo.Exists;
+        if (!directoryExisted) dirInfo.Create();
+        dirInfo.Refresh();
+        if (!directoryExisted || string.Equals(dirInfo.Name, MiniVaultConfiguration.ProductFolderName, StringComparison.OrdinalIgnoreCase))
+            dirInfo.SetAccessControl(WindowsFileAcl.CreateOwnerOnlyDirectory());
+
         var protectedBytes = ProtectedData.Protect(kek, Entropy, DataProtectionScope.LocalMachine);
-        var temp = FilePath + ".tmp";
-        File.WriteAllBytes(temp, protectedBytes);
-        File.Move(temp, FilePath, overwrite: true);
+        var temp = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            var fileSecurity = WindowsFileAcl.CreateOwnerOnly();
+            using (var stream = new FileInfo(temp).Create(FileMode.CreateNew, FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.None, fileSecurity))
+                stream.Write(protectedBytes, 0, protectedBytes.Length);
+            File.Move(temp, FilePath, overwrite: true);
+        }
+        finally
+        {
+            Array.Clear(protectedBytes);
+            if (File.Exists(temp)) File.Delete(temp);
+        }
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MiniVault.Server.Cli;
 using MiniVault.Server.Keys;
@@ -12,14 +13,23 @@ public class CliAppTests : IAsyncLifetime
     public async Task InitializeAsync() => _db = await TestDatabase.CreateAsync(migrate: false);
     public async Task DisposeAsync() => await _db.DisposeAsync();
 
-    private async Task<(int Code, string Output)> Run(params string[] args)
+    private Task<(int Code, string Output)> Run(params string[] args) => Run(args, connectionString: null);
+
+    private async Task<(int Code, string Output)> Run(string[] args, string? connectionString)
     {
         var output = new StringWriter();
         var code = await CliApp.RunAsync(
-            [.. args, "--ConnectionStrings:MiniVault", _db.ConnectionString],
+            [.. args, "--ConnectionStrings:MiniVault", connectionString ?? _db.ConnectionString],
             output,
             services => services.AddSingleton<IMasterKeyProvider>(_provider));
         return (code, output.ToString());
+    }
+
+    private async Task<bool> VaultMetadataExistsAsync()
+    {
+        await using var ctx = _db.CreateContext();
+        await ctx.Database.MigrateAsync();
+        return await ctx.VaultMetadata.AnyAsync();
     }
 
     private static List<string> Lines(string output, string prefix) =>
@@ -100,5 +110,61 @@ public class CliAppTests : IAsyncLifetime
         var (code, _) = await Run("init", "--recovery", "shamir", "--shares", "3");
 
         code.ShouldNotBe(0);
+    }
+
+    [Fact]
+    public void StripConfigurationOverrides_RemovesConfigTokensAndValues()
+    {
+        var input = new[] { "init", "--recovery", "single", "--ConnectionStrings:MiniVault", "Server=x;Database=y", "--out", "f" };
+
+        var result = CliApp.StripConfigurationOverrides(input);
+
+        result.ShouldBe(["init", "--recovery", "single", "--out", "f"]);
+    }
+
+    [Fact]
+    public async Task Init_UnknownOption_IsRejected()
+    {
+        var (code, _) = await Run("init", "--recovery", "single", "--uot", "x.txt");
+
+        code.ShouldNotBe(0);
+        (await VaultMetadataExistsAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Init_Shamir_ThresholdAboveShares_IsRejected()
+    {
+        var (code, output) = await Run("init", "--recovery", "shamir", "--shares", "2", "--threshold", "3");
+
+        code.ShouldNotBe(0);
+        output.ShouldContain("--threshold");
+    }
+
+    [Fact]
+    public async Task Init_WithBadConnectionString_PrintsErrorLine()
+    {
+        var (code, output) = await Run(
+            ["init", "--recovery", "single"],
+            "Server=127.0.0.1,1;Database=x;Integrated Security=true;Connect Timeout=1;TrustServerCertificate=true");
+
+        code.ShouldBe(1);
+        output.ShouldContain("Error:");
+        output.ShouldNotContain("   at ");
+    }
+
+    [Fact]
+    public async Task Init_Single_WithExistingOutFile_Fails()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"minivault-{Guid.NewGuid():N}.txt");
+        File.WriteAllText(file, "existing");
+        try
+        {
+            var (code, output) = await Run("init", "--recovery", "single", "--out", file);
+
+            code.ShouldBe(1);
+            output.ShouldContain("Error:");
+            (await VaultMetadataExistsAsync()).ShouldBeFalse();
+        }
+        finally { File.Delete(file); }
     }
 }

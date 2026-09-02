@@ -28,7 +28,10 @@ public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider 
 
         if (!await db.VaultMetadata.AnyAsync(ct)) throw new VaultNotInitializedException();
         var keys = await db.DataKeys.AsNoTracking().ToListAsync(ct);
-        var active = keys.SingleOrDefault(k => k.IsActive) ?? throw new VaultException("No active data key found.");
+        var activeKeys = keys.Where(k => k.IsActive).ToList();
+        if (activeKeys.Count != 1)
+            throw new VaultException($"Expected exactly one active data key, found {activeKeys.Count}.");
+        var active = activeKeys[0];
 
         byte[] kek;
         try { kek = provider.GetKek(); }
@@ -40,7 +43,7 @@ public sealed class DataKeyRing(IServiceScopeFactory scopes, IMasterKeyProvider 
             foreach (var key in keys)
                 _deks[key.Version] = KeyHierarchy.UnwrapWithMaster(key, kek);
         }
-        catch (System.Security.Cryptography.CryptographicException ex)
+        catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or ArgumentException)
         {
             _deks.Clear();
             throw new VaultException("The master key does not unwrap the stored data keys. Wrong master key for this database, or the database belongs to another vault.", ex);

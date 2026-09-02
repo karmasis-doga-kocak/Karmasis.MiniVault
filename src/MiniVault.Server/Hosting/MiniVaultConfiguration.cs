@@ -4,6 +4,8 @@ namespace MiniVault.Server.Hosting;
 /// Adds the MiniVault configuration sources on top of the host defaults:
 /// the machine-wide %ProgramData%\MiniVault\appsettings.json (Windows installs),
 /// then environment variables and command-line arguments.
+/// Environment variables and command-line arguments are re-added AFTER the machine-wide file on purpose: the host
+/// defaults registered them earlier, and without re-adding them the ProgramData file would outrank them.
 /// </summary>
 public static class MiniVaultConfiguration
 {

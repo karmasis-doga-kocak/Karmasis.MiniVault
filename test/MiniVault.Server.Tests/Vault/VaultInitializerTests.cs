@@ -86,6 +86,20 @@ public class VaultInitializerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Initialize_WhenProviderAlreadyHasKey_Throws_UnlessForced()
+    {
+        var provider = new InMemoryMasterKeyProvider(new byte[32]);
+        await using var ctx = _db.CreateContext();
+        var sut = new VaultInitializer(ctx, provider, _clock);
+
+        await Should.ThrowAsync<VaultException>(() => sut.InitializeAsync(new InitOptions(RecoveryMode.Single), CancellationToken.None));
+        (await ctx.VaultMetadata.AnyAsync()).ShouldBeFalse();
+
+        var result = await sut.InitializeAsync(new InitOptions(RecoveryMode.Single, Force: true), CancellationToken.None);
+        result.MasterKeyStored.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Initialize_WhenStoreFails_DoesNotMarkVaultInitialized()
     {
         var provider = new ThrowingStoreProvider();

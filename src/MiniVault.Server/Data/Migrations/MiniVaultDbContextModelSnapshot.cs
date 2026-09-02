@@ -128,7 +128,9 @@ namespace MiniVault.Server.Data.Migrations
 
                     b.HasKey("Version");
 
-                    b.HasIndex("IsActive");
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.ToTable("DataKeys", (string)null);
                 });
