@@ -1,0 +1,15 @@
+bin/
+obj/
+**/bin/
+**/obj/
+.git/
+.superpowers/
+TestResults/
+**/TestResults/
+artifacts/
+**/launchSettings.json
+deploy/
+docs/
+*.md
+.vs/
+.idea/

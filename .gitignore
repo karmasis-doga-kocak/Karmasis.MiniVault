@@ -9,3 +9,7 @@ TestResults/
 *.swp
 .superpowers/
 appsettings.Local.json
+
+# Local nupkg feed staged by docker/build-local.ps1 for the Docker build context.
+packages/*
+!packages/.gitkeep

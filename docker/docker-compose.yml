@@ -1,0 +1,32 @@
+services:
+  # One-shot initializer. Run with:
+  #   docker compose --profile init run --rm minivault-init
+  # Prints the master key (unless the configured MasterKey provider can store it itself)
+  # and the recovery material to stdout - capture it from `docker compose logs` / the
+  # terminal, then discard the container. Does not start the HTTPS listener.
+  minivault-init:
+    image: karmasis/minivault:dev
+    profiles: ["init"]
+    command: ["init", "--recovery", "shamir", "--shares", "3", "--threshold", "2"]
+    environment:
+      ConnectionStrings__MiniVault: ${CONNECTIONSTRINGS__MINIVAULT}
+      MasterKey__Provider: Environment
+
+  minivault:
+    image: karmasis/minivault:dev
+    environment:
+      ConnectionStrings__MiniVault: ${CONNECTIONSTRINGS__MINIVAULT}
+      MasterKey__Provider: Environment
+      MINIVAULT__MASTERKEY: ${MINIVAULT__MASTERKEY}
+      Tls__Certificate__Path: /certs/minivault.pfx
+      Tls__Certificate__Password: ${TLS_CERTIFICATE_PASSWORD}
+    volumes:
+      - ./certs:/certs:ro
+    ports:
+      - "8200:8200"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-kfsS", "https://localhost:8200/v1/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
