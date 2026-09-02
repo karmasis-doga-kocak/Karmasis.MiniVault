@@ -198,6 +198,32 @@ public class KestrelConfigurationTests : IDisposable
         }
     }
 
+    /// <summary>"preferHostingUrls"/"urls" are the configuration-key equivalents of
+    /// ASPNETCORE_PREFERHOSTINGURLS/ASPNETCORE_URLS that container images and hosting panels set unconditionally.
+    /// <see cref="KestrelConfiguration.Apply"/> forces PreferHostingUrls(false), so even with both present the
+    /// server must still end up bound to exactly the one HTTPS address from Tls:Url, not the plain-HTTP one.</summary>
+    [Fact]
+    public async Task Apply_WithPreferHostingUrlsAndUrlsConfigured_StillBindsExactlyOneHttpsAddress()
+    {
+        await using var app = BuildApp(CreateRealBuilder(
+            ("Tls:Url", "https://127.0.0.1:0"),
+            ("Tls:AllowDevelopmentCertificate", "true"),
+            ("preferHostingUrls", "true"),
+            ("urls", "http://127.0.0.1:0")));
+        await app.StartAsync();
+        try
+        {
+            var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses;
+
+            addresses.Count.ShouldBe(1);
+            addresses.Single().ShouldStartWith("https://");
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
     /// <summary>Starts a real server on the ASP.NET Core development certificate; if this machine has none Kestrel
     /// can use, retries with a self-signed PFX written to the test's temp directory.</summary>
     private async Task<WebApplication> StartRealHttpsServerAsync()

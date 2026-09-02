@@ -1,6 +1,8 @@
 ﻿using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
 
 namespace MiniVault.Server.Hosting;
@@ -15,7 +17,10 @@ namespace MiniVault.Server.Hosting;
 /// (<c>Kestrel:Certificates</c>, limits, ...), because the configuration loader ASP.NET Core installs over that
 /// section is replaced with an empty configuration here; and <c>ASPNETCORE_URLS</c>/<c>--urls</c>/
 /// <c>ASPNETCORE_HTTP_PORTS</c>, which container images and hosting panels set unconditionally — a warning is
-/// logged for <c>ASPNETCORE_URLS</c> and the explicit <c>Listen</c> below wins.</para>
+/// logged for <c>ASPNETCORE_URLS</c> and the explicit <c>Listen</c> below wins. <c>ASPNETCORE_PREFERHOSTINGURLS</c>
+/// is pinned to <c>false</c> for the same reason: preferring hosting URLs is what would let
+/// <c>ASPNETCORE_URLS</c>/<c>--urls</c> win over the explicit <c>Listen</c> call configured here instead of
+/// merely being logged and ignored.</para>
 /// </summary>
 public static class KestrelConfiguration
 {
@@ -128,6 +133,11 @@ public static class KestrelConfiguration
         var endpoint = ParseEndpoint(tls.Url);
         var configuration = builder.Configuration;
 
+        // Belt and braces alongside the ASPNETCORE_URLS warning above: PreferHostingUrls(true) is what would let
+        // ASPNETCORE_URLS/--urls override the explicit Listen call below instead of merely being logged and
+        // ignored. Force it off regardless of what ASPNETCORE_PREFERHOSTINGURLS or configuration says.
+        builder.WebHost.PreferHostingUrls(false);
+
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             if (HasEndpointConfiguration(configuration))
@@ -152,6 +162,26 @@ public static class KestrelConfiguration
     {
         using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
         log(loggerFactory.CreateLogger(nameof(KestrelConfiguration)));
+    }
+
+    /// <summary>Belt-and-braces check run once Kestrel has actually bound its sockets: everything in
+    /// <see cref="Apply"/> (the endpoint-configuration guard, pinning <c>PreferHostingUrls</c> to false, ignoring
+    /// <c>ASPNETCORE_URLS</c>) exists to make this true, but this is the check that fails loudly if some future
+    /// hosting change — or a hosting layer MiniVault does not control — lets a second listener or a non-HTTPS
+    /// address through anyway.</summary>
+    /// <exception cref="InvalidOperationException">The server is not bound to exactly one address, or that address
+    /// does not start with <c>https://</c>.</exception>
+    public static void AssertSingleHttpsAddress(IServiceProvider services)
+    {
+        var addresses = services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses
+            ?? Array.Empty<string>();
+        var httpsAddresses = addresses.Where(a => a.StartsWith("https://", StringComparison.Ordinal)).ToList();
+
+        if (addresses.Count != 1 || httpsAddresses.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"MiniVault bound an unexpected address: expected exactly one https:// address, got [{string.Join(", ", addresses)}].");
+        }
     }
 
     /// <summary>Resolves the host part of <paramref name="url"/> to an <see cref="IPEndPoint"/>. Hostnames are not

@@ -56,6 +56,12 @@ public class CliAppTests : IAsyncLifetime
         code2.ShouldBe(0);
         output2.ShouldContain("Database is up to date.");
 
+        // The second run has nothing to apply, so its audit row must not be left with an empty Detail
+        // (string.Join(", ", []) == "") - "none" is what an operator reading the audit log expects instead.
+        await using var ctx = _db.CreateContext();
+        var lastMigrateLog = await ctx.AuditLogs.Where(l => l.Action == "migrate").OrderByDescending(l => l.Id).FirstAsync();
+        lastMigrateLog.Detail.ShouldBe("none");
+
         var (code3, output3) = await Run("init", "--recovery", "single");
         code3.ShouldBe(0);
         output3.ShouldContain("Recovery key");

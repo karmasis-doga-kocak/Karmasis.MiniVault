@@ -167,9 +167,9 @@
          (1/0) and MV_SQL_ERROR and never fails the installation. -->
     <ROW Action="TestSqlConnection" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_2" WithoutSeq="true"/>
     <!-- Type 1 = DLL in the Binary table, immediate, return value checked: returning Failure aborts the
-         installation. Sequenced right after LaunchConditions, so a value that cannot survive
-         CustomActionData (anything containing a double quote) is rejected before a single file is
-         copied. -->
+         installation. Sequenced right after AI_ExtractTempFiles (which is what puts this action's own
+         DLL on disk) and before InstallInitialize, so a value that cannot survive CustomActionData
+         (anything containing a double quote) is rejected before a single file is installed. -->
     <ROW Action="ValidateProperties" Type="1" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_4"/>
     <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>
     <ROW Action="AI_DoRemoveExternalUIStub" Type="3585" Source="ExternalUICleaner.dll" Target="DoRemoveExternalUIStub" WithoutSeq="true"/>
@@ -194,11 +194,13 @@
     <ROW Action="AI_DOWNGRADE" Condition="AI_NEWERPRODUCTFOUND AND (UILevel &lt;&gt; 5)" Sequence="210"/>
     <ROW Action="AI_EnableDebugLog" Sequence="51"/>
     <ROW Action="AI_ResolveKnownFolders" Sequence="52"/>
-    <!-- LaunchConditions is 100; validate the operator's input immediately after it. -->
-    <ROW Action="AI_DATA_SETTER_4" Sequence="101"/>
-    <ROW Action="ValidateProperties" Sequence="102"/>
     <ROW Action="AI_RESTORE_LOCATION" Condition="APPDIR=&quot;&quot;" Sequence="749"/>
     <ROW Action="AI_ExtractTempFiles" Sequence="1001"/>
+    <!-- Validation must run against the extracted CustomActions DLL, so it is sequenced right after
+         AI_ExtractTempFiles (1001) and before InstallInitialize (1500), not immediately after
+         LaunchConditions - the DLL used to invoke it does not exist on disk that early. -->
+    <ROW Action="AI_DATA_SETTER_4" Sequence="1002"/>
+    <ROW Action="ValidateProperties" Sequence="1003"/>
     <ROW Action="AI_PREPARE_UPGRADE" Condition="AI_UPGRADE=&quot;No&quot; AND (Not Installed)" Sequence="1397"/>
     <ROW Action="AI_GetArpIconPath" Sequence="1403"/>
     <ROW Action="AI_DATA_SETTER_3" Sequence="1503"/>

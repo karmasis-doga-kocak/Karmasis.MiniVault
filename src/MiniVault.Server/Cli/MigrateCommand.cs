@@ -34,7 +34,7 @@ public static class MigrateCommand
                 ClientId = VaultInitializer.AuditClientId,
                 Action = "migrate",
                 Success = true,
-                Detail = AuditWriter.TruncateDetail(string.Join(", ", pending)),
+                Detail = pending.Count == 0 ? "none" : AuditWriter.TruncateDetail(string.Join(", ", pending)),
             });
             await db.SaveChangesAsync(ct);
 

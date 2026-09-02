@@ -164,18 +164,21 @@ public class DpapiMasterKeyProviderTests : IDisposable
         rules.ShouldNotContain(r => ((SecurityIdentifier)r.IdentityReference).IsWellKnown(WellKnownSidType.BuiltinUsersSid));
     }
 
-    /// <summary>The merge that keeps a service-account grant must not keep a grant to <c>Everyone</c>: carrying it
-    /// onto masterkey.bin would hand the DPAPI blob to every account on the machine. It is dropped from the key
-    /// file and from the directory alike.</summary>
+    /// <summary>The merge that keeps a service-account grant must not keep a grant to <c>Everyone</c> or
+    /// <c>Guests</c>: carrying either onto masterkey.bin would hand the DPAPI blob to every account on the
+    /// machine, or to an unauthenticated Guest logon. Both are dropped from the key file and from the directory
+    /// alike.</summary>
     [Fact]
     [SupportedOSPlatform("windows")]
-    public void Store_DropsEveryoneGrant_FromTheKeyFileAndTheDirectory()
+    public void Store_DropsEveryoneAndGuestsGrant_FromTheKeyFileAndTheDirectory()
     {
         if (!OperatingSystem.IsWindows()) return;
         var everyone = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+        var guests = new SecurityIdentifier(WellKnownSidType.BuiltinGuestsSid, null);
         var serviceAccount = new SecurityIdentifier(WellKnownSidType.NetworkServiceSid, null);
         var dir = Directory.CreateDirectory(_dir);
         GrantReadExecute(dir, everyone);
+        GrantReadExecute(dir, guests);
         GrantReadExecute(dir, serviceAccount);
 
         var path = Path.Combine(_dir, "masterkey.bin");
@@ -183,12 +186,14 @@ public class DpapiMasterKeyProviderTests : IDisposable
 
         var fileRules = AllowRules(new FileInfo(path).GetAccessControl());
         fileRules.ShouldNotContain(r => r.IdentityReference.Equals(everyone));
+        fileRules.ShouldNotContain(r => r.IdentityReference.Equals(guests));
         fileRules.ShouldContain(r => r.IdentityReference.Equals(serviceAccount)); // a specific account is still carried over
 
         // Store leaves a pre-existing directory's ACL alone; re-protecting the directory is what drops the grant.
         dir.SetAccessControl(WindowsFileAcl.CreateOwnerOnlyDirectory(dir));
         var directoryRules = AllowRules(new DirectoryInfo(_dir).GetAccessControl());
         directoryRules.ShouldNotContain(r => r.IdentityReference.Equals(everyone));
+        directoryRules.ShouldNotContain(r => r.IdentityReference.Equals(guests));
         directoryRules.ShouldContain(r => r.IdentityReference.Equals(serviceAccount));
     }
 

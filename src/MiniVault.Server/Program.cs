@@ -39,7 +39,12 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapMiniVaultApi();
-    app.Run();
+    await app.StartAsync();
+    // Kestrel has now actually bound its sockets: confirm the belt-and-braces assumption every check in
+    // KestrelConfiguration.Apply exists to guarantee, so a hosting change that slips a second or non-HTTPS
+    // listener through is caught here instead of silently shipping.
+    KestrelConfiguration.AssertSingleHttpsAddress(app.Services);
+    await app.WaitForShutdownAsync();
     return 0;
 }
 // A startup failure is an operator's problem, not a developer's: report the reason on one line and exit 3, so a

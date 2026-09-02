@@ -23,9 +23,10 @@ internal static class WindowsFileAcl
         FileSystemRights.Read | FileSystemRights.ReadAttributes | FileSystemRights.ReadPermissions;
 
     /// <summary>Well-known groups whose grants are never carried over: everyone (S-1-1-0), all local users
-    /// (S-1-5-32-545), everyone authenticated (S-1-5-11), everyone logged on interactively, and everyone logged
-    /// on over the network. A grant to a specific account — the service account
-    /// <c>deploy/windows/install.ps1</c> configures, e.g. NETWORK SERVICE — is still kept.</summary>
+    /// (S-1-5-32-545), everyone authenticated (S-1-5-11), everyone logged on interactively, everyone logged
+    /// on over the network, built-in guests, anonymous logon, the generic service group (S-1-5-6, every
+    /// account running as a service), and the built-in Power Users group. A grant to a specific account — the
+    /// service account <c>deploy/windows/install.ps1</c> configures, e.g. NETWORK SERVICE — is still kept.</summary>
     private static readonly WellKnownSidType[] BroadSidTypes =
     [
         WellKnownSidType.WorldSid,
@@ -33,6 +34,10 @@ internal static class WindowsFileAcl
         WellKnownSidType.AuthenticatedUserSid,
         WellKnownSidType.InteractiveSid,
         WellKnownSidType.NetworkSid,
+        WellKnownSidType.BuiltinGuestsSid,
+        WellKnownSidType.AnonymousSid,
+        WellKnownSidType.ServiceSid,
+        WellKnownSidType.BuiltinPowerUsersSid,
     ];
 
     private static bool IsBroadIdentity(IdentityReference identity) =>

@@ -195,6 +195,50 @@ foreach ($row in $customActions | Where-Object {
     }
 }
 
+# ---------------------------------------------------------------------------
+# 2b. Managed custom actions must run after the payload is extracted
+# ---------------------------------------------------------------------------
+Write-Section '2b. Managed custom actions run after AI_ExtractTempFiles'
+
+# "Managed" here means: the property setters that stage a managed action's CustomActionData
+# (already collected in $managedActions, keyed by setter name) and the DotNetMethodCaller.dll rows
+# that actually invoke the custom-actions DLL. Both need the DLL to already be on disk, which
+# AI_ExtractTempFiles is what puts it there.
+$managedActionNames = [System.Collections.Generic.HashSet[string]]::new()
+foreach ($name in $managedActions.Keys) { [void]$managedActionNames.Add($name) }
+foreach ($row in $customActions | Where-Object {
+        $_.PSObject.Properties.Name -contains 'Source' -and $_.Source -eq 'DotNetMethodCaller.dll' }) {
+    [void]$managedActionNames.Add($row.Action)
+}
+
+$sequenceTableComponents = @($components.Values | Where-Object {
+        $_.PSObject.Properties.Name -contains 'ROW' -and (@($_.ROW) | Where-Object {
+                $_.PSObject.Properties.Name -contains 'Action' -and $_.PSObject.Properties.Name -contains 'Sequence'
+            })
+    })
+
+foreach ($table in $sequenceTableComponents) {
+    $tableName = $table.cid.Replace('caphyon.advinst.msicomp.', '')
+    $seqByAction = @{}
+    foreach ($row in @($table.ROW)) {
+        if ($row.PSObject.Properties.Name -contains 'Action' -and $row.PSObject.Properties.Name -contains 'Sequence') {
+            $seqByAction[$row.Action] = [int]$row.Sequence
+        }
+    }
+    if (-not $seqByAction.ContainsKey('AI_ExtractTempFiles')) { continue }
+    $extractSeq = $seqByAction['AI_ExtractTempFiles']
+
+    foreach ($name in $managedActionNames) {
+        if (-not $seqByAction.ContainsKey($name)) { continue }
+        $seq = $seqByAction[$name]
+        if ($seq -gt $extractSeq) {
+            Write-Ok "${tableName}: '$name' (seq=$seq) runs after AI_ExtractTempFiles (seq=$extractSeq)"
+        } else {
+            Write-Fail "${tableName}: '$name' (seq=$seq) runs at or before AI_ExtractTempFiles (seq=$extractSeq) - the custom-actions DLL may not be extracted yet"
+        }
+    }
+}
+
 # Custom action method names must exist in the C# source.
 $actionsSource = Join-Path $setupRoot 'Karmasis.MiniVault.CustomActions\InstallActions.cs'
 if (Test-Path -LiteralPath $actionsSource) {

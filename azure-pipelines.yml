@@ -296,6 +296,17 @@ stages:
       env:
         DOCKER_REGISTRY_PASSWORD: $(dockerRegistryPassword)
 
+    # condition: always() so the agent's stored credentials for $(dockerRegistry) are cleared even when the
+    # push above failed (or the login itself failed) - otherwise a shared self-hosted agent keeps the
+    # registry session logged in for whichever job runs next on it.
+    - task: PowerShell@2
+      displayName: 'docker logout'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          docker logout $(dockerRegistry)
+
 # ---------------------------------------------------------------------------------------
 # Stage 4 (optional, off by default): build the custom actions and the MSI. Turn on by
 # setting the buildMsi variable to 'true'. Requires an agent with Visual Studio / VS Build

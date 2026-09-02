@@ -211,8 +211,8 @@ function Grant-ServiceLogonRight {
     $databasePath = Join-Path $temp "$stem.sdb"
     try {
         & secedit.exe /export /areas USER_RIGHTS /cfg $exportPath /quiet | Out-Null
-        if (-not (Test-Path $exportPath)) {
-            Write-Warning 'secedit /export produced no file, so SeServiceLogonRight was not granted.'
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exportPath)) {
+            Write-Warning "secedit /export returned exit code $LASTEXITCODE and produced no usable file, so SeServiceLogonRight was not granted."
             return $false
         }
 
@@ -540,6 +540,7 @@ Write-Host ''
 # ---------------------------------------------------------------------------
 # Step 5: register (and start) the Windows service.
 # ---------------------------------------------------------------------------
+$logonRightGrantFailed = $false
 $registerVerb = if ($serviceExists) { 'reconfigure' } else { 'register' }
 $startDescription = if ($SkipServiceStart) { "$registerVerb (not start, -SkipServiceStart)" } else { "$registerVerb and start" }
 Write-Host "Step 5: $startDescription the '$ServiceName' Windows service$existingServiceNote."
@@ -589,9 +590,13 @@ if (-not $WhatIfMode) {
     }
 
     # Without "Log on as a service" the SCM refuses to start the service with error 1069, whether it
-    # was just created or only reconfigured.
+    # was just created or only reconfigured. Remember a failed grant so the Step 6 health-check
+    # failure message can point at it - it is the single most likely cause of a service that is
+    # registered and started but never answers its health endpoint.
     if ($serviceAccountNeedsPassword -and -not $SkipLogonRightGrant) {
-        Grant-ServiceLogonRight -AccountName $ServiceAccount | Out-Null
+        if (-not (Grant-ServiceLogonRight -AccountName $ServiceAccount)) {
+            $logonRightGrantFailed = $true
+        }
     }
 
     if ($SkipServiceStart) {
@@ -625,7 +630,8 @@ if (-not $WhatIfMode -and -not $SkipServiceStart) {
             # A distinct exit code: the install itself completed, so a caller can tell "nothing was
             # installed" (1) from "installed but not serving" (2) - usually a missing SQL grant, a bad
             # certificate, or an uninitialized vault. See docs/operations.md, Troubleshooting.
-            Write-Error "MiniVault was installed but $healthUrl did not answer. Check 'sc.exe query $ServiceName', the Windows Application event log, and the SQL grant printed above. Re-run with -IgnoreHealthCheck to ignore this." -ErrorAction Continue
+            $logonRightHint = if ($logonRightGrantFailed) { " Also note: granting SeServiceLogonRight to '$ServiceAccount' failed earlier, so the service account may lack SeServiceLogonRight (1069) - grant it in secpol.msc." } else { '' }
+            Write-Error "MiniVault was installed but $healthUrl did not answer. Check 'sc.exe query $ServiceName', the Windows Application event log, and the SQL grant printed above.$logonRightHint Re-run with -IgnoreHealthCheck to ignore this." -ErrorAction Continue
             exit 2
         }
     }
