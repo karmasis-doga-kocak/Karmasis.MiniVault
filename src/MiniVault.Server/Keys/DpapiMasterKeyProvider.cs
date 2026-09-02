@@ -37,9 +37,9 @@ public sealed class DpapiMasterKeyProvider : IMasterKeyProvider
                 throw new MasterKeyUnavailableException($"Master key file {FilePath} has an unexpected length.");
             return kek;
         }
-        catch (CryptographicException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
         {
-            throw new MasterKeyUnavailableException($"Master key file {FilePath} could not be unprotected. It was created on another machine or is corrupted.", ex);
+            throw new MasterKeyUnavailableException($"Master key file {FilePath} could not be read or unprotected ({ex.GetType().Name}). It may be locked, inaccessible, corrupted, or created on another machine.", ex);
         }
     }
 

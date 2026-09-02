@@ -57,4 +57,17 @@ public class DpapiMasterKeyProviderTests : IDisposable
 
         Should.Throw<ArgumentException>(() => provider.Store(new byte[16]));
     }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void GetKek_Throws_MasterKeyUnavailable_WhenFileLocked()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var path = Path.Combine(_dir, "masterkey.bin");
+        var provider = new DpapiMasterKeyProvider(path);
+        provider.Store(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
+        using var handle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Should.Throw<MasterKeyUnavailableException>(() => provider.GetKek());
+    }
 }
