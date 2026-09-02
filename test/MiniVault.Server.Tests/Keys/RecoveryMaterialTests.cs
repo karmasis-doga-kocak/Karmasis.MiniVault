@@ -52,4 +52,11 @@ public class RecoveryMaterialTests
     [Fact]
     public void Reconstruct_Single_RequiresExactlyOnePart() =>
         Should.Throw<ArgumentException>(() => RecoveryMaterial.Reconstruct(RecoveryMode.Single, ["a", "b"]));
+
+    [Fact]
+    public void Reconstruct_NullOrBlankPart_ThrowsArgumentException()
+    {
+        Should.Throw<ArgumentException>(() => RecoveryMaterial.Reconstruct(RecoveryMode.Single, [null!]));
+        Should.Throw<ArgumentException>(() => RecoveryMaterial.Reconstruct(RecoveryMode.Shamir, ["AQ==", " "]));
+    }
 }

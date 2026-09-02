@@ -38,6 +38,8 @@ public sealed class RecoveryMaterial
     public static byte[] Reconstruct(RecoveryMode mode, IReadOnlyList<string> parts)
     {
         ArgumentNullException.ThrowIfNull(parts);
+        if (parts.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException("Recovery parts must not be null or empty.", nameof(parts));
         switch (mode)
         {
             case RecoveryMode.Single:
