@@ -684,7 +684,7 @@ Audit rows are written on their own database connection, independent of the requ
 | `unauthorized` | Missing, invalid, or expired bearer token; or bad credentials at `/v1/auth/token`. |
 | `forbidden` | The token's roles have no rule whose scope is a prefix of the requested secret name (or the requested permission is read-only where write is required). |
 | `not_found` | No secret exists at that name. |
-| `invalid_request` | Malformed input: a secret name that is not 1–256 characters of letters, digits, `.`, `_` and `-` in `/`-separated segments; a missing or non-base64 `value`; missing `clientId`/`clientSecret`; a value over 1,048,576 bytes; a `contentType` over 128 characters; a body that is not readable JSON. |
+| `invalid_request` | Malformed input: a secret name that is not 1–256 characters of letters, digits, `.`, `_` and `-` in `/`-separated segments (a segment made only of dots, such as `..`, is rejected too); a missing or non-base64 `value`; missing `clientId`/`clientSecret`; a value over 1,048,576 bytes; a `contentType` over 128 characters; a body that is not readable JSON. |
 | `conflict` | The secret was modified concurrently (optimistic concurrency); retry the request. |
 | `vault_unavailable` | The vault is temporarily unavailable (master key or database unreachable). |
 | `internal_error` | Unexpected server failure. |

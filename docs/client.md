@@ -96,7 +96,9 @@ public class MiniVaultModule : NinjectModule
 ```
 
 Keep **one** `IMiniVaultClient` per process, and dispose it at shutdown so the background refresh
-timer and the underlying `HttpClient` are released cleanly. Do not rely on the container for that
+timer and the underlying `HttpClient` are released cleanly. `Dispose()` waits for a refresh pass that
+is running at that moment (for at most 10 seconds) and never writes the cache file after it has
+returned, so tearing down the cache directory right after it is safe. Do not rely on the container for that
 here: Ninject may not dispose an instance bound with `ToConstant()` — it did not create it — so
 call `client.Dispose()` yourself in your shutdown path.
 
@@ -314,7 +316,7 @@ to read a secret without being allowed to list.
 | `MiniVaultAuthException` | 401 | Bad or expired credentials, or a bearer token that no longer works. | Check `ClientId`/`ClientSecret`. Confirm the client was not removed or disabled (`minivault client list`). The client already retries once on its own after a 401 by fetching a fresh token — this exception means that retry also failed. |
 | `MiniVaultForbiddenException` | 403 | Authenticated, but no role grants access to that secret name (or the role is read-only and you called `SetSecretAsync`/`DeleteSecretAsync`). | Grant the scope: `minivault role grant <role> --scope <prefix> --permission <read\|write>`, then `minivault client assign`. |
 | `MiniVaultNotFoundException` | 404 | No secret exists at that name. | Check the name for a typo, or write the secret first with `SetSecretAsync` (or from another client that holds write on that scope). |
-| `MiniVaultRequestException` | 400 / 409 | 400: malformed input — a name outside 1–256 characters of letters, digits, `.`, `_`, `-` in `/`-separated segments, a value over 1,048,576 bytes, or a `contentType` over 128 characters. 409: the secret was modified concurrently. | Fix the input for 400. For 409, retry the write once — it is an optimistic-concurrency conflict, not a bug. |
+| `MiniVaultRequestException` | 400 / 409 | 400: malformed input — a name outside 1–256 characters of letters, digits, `.`, `_`, `-` in `/`-separated segments (or with a segment made only of dots, such as `..`), a value over 1,048,576 bytes, or a `contentType` over 128 characters. 409: the secret was modified concurrently. | Fix the input for 400. For 409, retry the write once — it is an optimistic-concurrency conflict, not a bug. |
 | `MiniVaultUnavailableException` | network error, timeout, 5xx, 429 | The server could not be reached, took too long, or is temporarily overloaded/rate-limited. | Retry with backoff. `GetSecretAsync` already falls back to the cache automatically when one is available — you only see this exception when there is nothing cached to fall back to. |
 
 Branch on the exception **type** (or on `MiniVaultException.ErrorCode`, which mirrors the
