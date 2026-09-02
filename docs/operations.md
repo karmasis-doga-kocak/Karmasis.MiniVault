@@ -12,7 +12,7 @@ Losing both the master key and the recovery material means the secrets are gone.
 
 ## Commands
 
-All commands read the same configuration as the server: `appsettings.json` next to the binary, then `%ProgramData%\MiniVault\appsettings.json` (Windows), then environment variables, then command-line overrides such as `--ConnectionStrings:MiniVault "..."`.
+All commands read the same configuration as the server: `appsettings.json` next to the binary, then `%ProgramData%\MiniVault\appsettings.json` (Windows), then environment variables, then command-line overrides of the form `--Section:Key value` (for example `--ConnectionStrings:MiniVault "..."`). Any other unknown option is rejected.
 
 ### `minivault init`
 
@@ -28,8 +28,9 @@ minivault init --recovery shamir --shares 5 --threshold 3 --master-key "my passp
 |---|---|
 | `--recovery single\|shamir` | One recovery key, or `shares` Shamir shares of which any `threshold` recover. |
 | `--shares n --threshold k` | Shamir only. `2 ≤ k ≤ n ≤ 255`. Recommended minimum: 3 shares, threshold 2. |
-| `--master-key <password>` | Derive the master key from a password (PBKDF2, salt and iteration count are stored in the database). Without it a random key is generated. |
-| `--out <file>` | Also write the output to a file. Delete the file after the material is stored safely. |
+| `--master-key <password>` | Derive the master key from a password (PBKDF2, salt and iteration count are stored in the database). Without it a random key is generated. The password is used only to derive the key at this moment; it is **not** a way back in later — if the master key file or environment value is lost, only the recovery material helps. Passing it on the command line exposes it to shell history and process listings; prefer omitting it (random key) or run the command from the installer. |
+| `--out <file>` | Also write the output to a file. Delete the file after the material is stored safely. The file is created with permissions for the current user only and is never overwritten; delete it after the material is stored safely. |
+| `--force` | Overwrite a master key that already exists in the provider. Without it, `init` refuses so that another vault on the same host does not lose its key. |
 
 Output example:
 
@@ -46,6 +47,8 @@ Master key stored by the Dpapi provider.
 ```
 
 With the `Environment` provider the last line instead prints the master key; set it as `MINIVAULT__MASTERKEY` before starting the server.
+
+With the `Environment` provider the master key is printed to standard output — in Docker that means `docker logs`; clear or rotate the log after copying the value.
 
 ### `minivault recover`
 
@@ -65,6 +68,8 @@ Creates a new active data key. New and updated secrets use it; existing secrets 
 ```
 minivault rotate-dek
 ```
+
+Restart the MiniVault service after rotating; the running server loads data keys at startup and will not see the new version until it restarts.
 
 ### `minivault` (no command) / `minivault serve`
 
