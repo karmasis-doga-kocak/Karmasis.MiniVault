@@ -1,8 +1,10 @@
 using System.Net;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using MiniVault.Contracts;
 using MiniVault.Server.Data.Entities;
 using MiniVault.Server.Keys;
 using MiniVault.Server.Tests.TestDoubles;
@@ -40,6 +42,21 @@ public class HealthEndpointTests : IAsyncLifetime
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await response.Content.ReadAsStringAsync()).ShouldContain("\"status\":\"ok\"");
+    }
+
+    [Fact]
+    public async Task Health_ReportsInitializedAndActiveVersion()
+    {
+        using var factory = CreateFactory(_provider);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/health");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<HealthResponse>();
+        body!.Status.ShouldBe("ok");
+        body.Initialized.ShouldBeTrue();
+        body.ActiveDataKeyVersion.ShouldBe(1);
     }
 
     [Fact]

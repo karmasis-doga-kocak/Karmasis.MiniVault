@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using MiniVault.Contracts;
 using MiniVault.Server.Keys;
 
 namespace MiniVault.Server.Auth;
@@ -24,6 +25,22 @@ public static class AuthServiceCollectionExtensions
                 NameClaimType = TokenService.SubjectClaim,
                 RoleClaimType = TokenService.RoleClaim,
                 ClockSkew = TimeSpan.FromSeconds(30),
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnChallenge = async ctx =>
+                {
+                    ctx.HandleResponse();
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsJsonAsync(new ErrorResponse { Error = ErrorResponse.Unauthorized });
+                },
+                OnForbidden = async ctx =>
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsJsonAsync(new ErrorResponse { Error = ErrorResponse.Forbidden });
+                },
             };
         });
         services.AddAuthorization();
