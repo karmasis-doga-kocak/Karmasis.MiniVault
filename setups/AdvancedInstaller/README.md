@@ -106,6 +106,9 @@ succeeds offline with the repo's own `nuget.config`.
    `%ProgramData%\MiniVault\appsettings.json` from the `MV_*` properties and re-applies the
    protected ACL — the same grants `install.ps1` applies with `icacls`, including the read/execute
    ACE for a service account that is not `LocalSystem`.
+   **If the file already exists it is kept**, and only the ACL is re-applied: an upgrade started from
+   Add/Remove Programs supplies the default `MV_*` values, and writing those over a working
+   configuration would take the server down. Pass `MV_RECONFIGURE=1` to overwrite it deliberately.
 4. `RunInit` (deferred, no-impersonate) runs
    `minivault.exe init --recovery <mode> --out %ProgramData%\MiniVault\recovery-<timestamp>.txt`.
    A non-zero exit shows the CLI's own `Error:` line in the MSI error dialog and fails the install —
@@ -114,8 +117,11 @@ succeeds offline with the repo's own `nuget.config`.
    already-initialized install: that case is treated as a no-op (an `INFO` message is logged and
    the action succeeds) instead of failing the upgrade.
 5. Registers the `KarmasisMiniVault` service (`MsiServInstComponent`: auto start, `LocalSystem` by
-   default via `MV_SERVICEACCOUNT`, description, restart-three-times failure actions) and starts it
-   (`MsiServCtrlComponent` event 160 = start on install, stop on uninstall).
+   default via `MV_SERVICEACCOUNT`, `MV_SERVICEACCOUNT_PASSWORD` in the `Password` column, description,
+   restart-three-times failure actions) and starts it (`MsiServCtrlComponent` event `163` = `0x01`
+   start on install + `0x02` stop on install + `0x20` stop on uninstall + `0x80` delete on uninstall).
+   The `0x01` bit is what actually starts the service; the earlier value `160` had only the uninstall
+   bits, so the MSI registered a service it never started.
 
 `TestSqlConnection` (immediate, unsequenced) is there for a "Test connection" button: it opens the
 connection string in `MV_CONNECTIONSTRING` with a 5-second timeout and sets `MV_SQL_OK` to `1` or
@@ -139,8 +145,17 @@ own `DotNetMethodCaller.dll`:
   `AdditionalSeq` pointing at its setter.
 
 `MapCustomActionData<T>()` from the kit parses `NAME="value", NAME2="value2"`; the values **must** be
-double-quoted, and a value containing a `"` will not round-trip. Keep quotes out of connection
-strings and passwords passed to the MSI.
+double-quoted, and a value containing a `"` will not round-trip. That is enforced rather than left to
+the operator: the immediate `ValidateProperties` custom action (sequenced right after
+`LaunchConditions`, so nothing has been installed yet) fails the installation with a message naming the
+property when `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` or `MV_SERVICEACCOUNT_PASSWORD`
+contains one.
+
+The master-key password is the one value that does **not** travel to `minivault.exe` on a command
+line: `RunInit` builds `init ... --master-key-from-env` and puts the password in the child's
+`MINIVAULT_INIT_MASTER_KEY` environment variable, which the CLI clears from its own environment as soon
+as it has read it. A deferred custom action's child command line is visible in the process list and is
+written to the MSI verbose log.
 
 ## MSI properties
 
@@ -176,29 +191,37 @@ than letting a truncated connection string or password reach the deferred action
 Until the configuration pages exist, this is *the* way to install:
 
 ```powershell
-msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log ^
-  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" ^
-  MV_RECOVERY=shamir MV_SHARES=3 MV_THRESHOLD=2 ^
-  MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567 ^
+msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log `
+  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" `
+  MV_RECOVERY=shamir MV_SHARES=3 MV_THRESHOLD=2 `
+  MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567 `
   MV_URL=https://0.0.0.0:8200
 ```
 
 With a PFX instead of a certificate from the store:
 
 ```powershell
-msiexec /i Karmasis.MiniVault.msi /qn ^
-  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" ^
+msiexec /i Karmasis.MiniVault.msi /qn `
+  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" `
   MV_CERT_PATH="C:\certs\minivault.pfx" MV_CERT_PASSWORD="change-me"
 ```
 
+(PowerShell continues a line with a backtick; from `cmd.exe` use `^` instead. A verbose log written by
+an MSI built **before** the `MsiHiddenProperties` fix contains every secret above in clear text — treat
+such a log as a secret and rotate what it exposed.)
+
 The service account still needs a SQL login before the service can start; `install.ps1` prints the
-script, and it is the same one:
+script, and it is the same one. The running service only reads and writes rows:
 
 ```sql
 CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS;
 CREATE USER  [NT AUTHORITY\SYSTEM] FOR LOGIN [NT AUTHORITY\SYSTEM];
-ALTER ROLE db_owner ADD MEMBER [NT AUTHORITY\SYSTEM];
+ALTER ROLE db_datareader ADD MEMBER [NT AUTHORITY\SYSTEM];
+ALTER ROLE db_datawriter ADD MEMBER [NT AUTHORITY\SYSTEM];
 ```
+
+DDL rights belong to whoever runs `init`/`migrate` (the MSI's `RunInit` runs as the elevated installer
+account, not as the service), not to the service itself.
 
 ## Recovery material
 
@@ -215,10 +238,23 @@ operator types `SAVED`; the MSI cannot prompt from a deferred action, so deletio
 
 ## Uninstall
 
-MSI stops and removes the `KarmasisMiniVault` service (`ServiceControl` event 160) and removes
-`APPDIR`. `%ProgramData%\MiniVault` is **kept**: it holds `appsettings.json` and the DPAPI master
-key, and deleting it would make the database unreadable after a reinstall. Remove it by hand when
-decommissioning a host — the same behaviour as `deploy/windows/uninstall.ps1`.
+MSI stops and removes the `KarmasisMiniVault` service (`ServiceControl` event `163`, bits `0x20` stop
+on uninstall + `0x80` delete on uninstall) and removes `APPDIR`. `%ProgramData%\MiniVault` is
+**kept** — the `MiniVaultData` component is marked permanent — because it holds `appsettings.json` and
+the DPAPI master key, and deleting it would make the database unreadable after a reinstall. The same
+behaviour as `deploy/windows/uninstall.ps1` without `-PurgeData`.
+
+### Decommissioning a host
+
+Uninstalling is not decommissioning. To retire a host for good, after the MSI uninstall:
+
+1. Confirm the recovery material is stored offline — deleting the master key without it makes every
+   secret in the database permanently unreadable.
+2. Delete `%ProgramData%\MiniVault` by hand (it holds `appsettings.json`, `masterkey.bin`, and any
+   `recovery-*.txt` you have not removed yet).
+3. Drop the SQL login/user for the service account, and the MiniVault database itself if nothing else
+   will use it.
+4. Remove the server certificate from `LocalMachine\My` if it was imported for MiniVault only.
 
 ## Designer follow-ups
 

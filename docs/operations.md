@@ -25,6 +25,7 @@ properties (`MV_*`):
 |---|---|---|
 | `MV_CONNECTIONSTRING` | *(empty, required)* | `ConnectionStrings:MiniVault`. |
 | `MV_SERVICEACCOUNT` | `LocalSystem` | Account the service runs as; also the identity granted read access to `%ProgramData%\MiniVault`. |
+| `MV_SERVICEACCOUNT_PASSWORD` | *(empty)* | Password for `MV_SERVICEACCOUNT`. Leave empty for the built-in accounts (`LocalSystem`, `NT AUTHORITY\NetworkService`, `NT AUTHORITY\LocalService`). |
 | `MV_RECOVERY` | `single` | `single` or `shamir`. |
 | `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
 | `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
@@ -33,6 +34,12 @@ properties (`MV_*`):
 | `MV_CERT_PASSWORD` | *(empty)* | PFX password. Stored in plain text in `appsettings.json`. |
 | `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. |
 | `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
+| `MV_RECONFIGURE` | *(empty)* | `1` to overwrite an existing `%ProgramData%\MiniVault\appsettings.json`. Empty (the default) keeps it — see "On upgrade" below. |
+
+None of `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` or `MV_SERVICEACCOUNT_PASSWORD` may
+contain a double quote (`"`). The installer hands them to its deferred actions as a
+`NAME="value"` list, where a quote would silently truncate the value; an immediate `ValidateProperties`
+action rejects it up front, naming the property, before anything is installed.
 
 **Interactive install**: today the MSI runs through the standard Advanced Installer dialogs only —
 the custom pages that would expose `MV_*` as form fields (connection string, master key, TLS,
@@ -44,12 +51,14 @@ the install.
 **Silent install**:
 
 ```powershell
-msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log ^
-  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" ^
-  MV_RECOVERY=shamir MV_SHARES=3 MV_THRESHOLD=2 ^
-  MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567 ^
+msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log `
+  MV_CONNECTIONSTRING="Server=sql01;Database=MiniVault;Integrated Security=true" `
+  MV_RECOVERY=shamir MV_SHARES=3 MV_THRESHOLD=2 `
+  MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567 `
   MV_URL=https://0.0.0.0:8200
 ```
+
+(PowerShell continues a line with a backtick; from `cmd.exe` use `^` instead.)
 
 **What the installer does**, in order:
 
@@ -58,7 +67,9 @@ msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log ^
 3. Writes `%ProgramData%\MiniVault\appsettings.json` from the `MV_*` properties and re-applies the
    protected ACL (the same grants `install.ps1` applies with `icacls`).
 4. Runs `minivault.exe init --recovery <mode> --out %ProgramData%\MiniVault\recovery-<timestamp>.txt`.
-5. Registers the `KarmasisMiniVault` service and starts it.
+5. Registers the `KarmasisMiniVault` service (running as `MV_SERVICEACCOUNT`, with
+   `MV_SERVICEACCOUNT_PASSWORD` when that account needs one) **and starts it**. A successful
+   installation therefore leaves a running service, not just a registered one.
 6. (Not sequenced into the install; available as a "Test connection" action once the designer pages
    exist.) Tests the connection string in `MV_CONNECTIONSTRING` and reports back via `MV_SQL_OK`/`MV_SQL_ERROR`.
 
@@ -67,10 +78,27 @@ custom action cannot show it in the UI). **Open that file, copy the recovery key
 offline location, and delete it** — it is not shown again and is readable only by SYSTEM and
 Administrators.
 
-**On upgrade**: step 4 (`init`) is skipped. The installer treats the server's "already initialized"
-response as a no-op instead of failing the upgrade, so re-running or upgrading the MSI over an
-existing install does not touch the existing vault, master key, or data. See "Upgrading" below for
-what you still need to run by hand (`minivault migrate`).
+**Secrets and `/l*v` logs**: `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` and
+`MV_SERVICEACCOUNT_PASSWORD` are listed in `MsiHiddenProperties`, and so are the deferred action names
+`WriteMachineConfig` and `RunInit` — a deferred action reads its input from a property named after the
+action, and MSI logs that property like any other, so hiding only the `MV_*` properties would still
+leave full copies of every secret in the log. **A verbose log taken with an MSI built before this fix
+does contain those secrets in clear text**: treat any existing `minivault-install.log` as a secret,
+and rotate the connection-string password, PFX password and master key if such a log was shared.
+
+**On upgrade**:
+
+- Step 4 (`init`) is skipped. The installer treats the server's "already initialized" response as a
+  no-op instead of failing the upgrade, so re-running or upgrading the MSI over an existing install
+  does not touch the existing vault, master key, or data.
+- Step 3 keeps the existing `%ProgramData%\MiniVault\appsettings.json` — an upgrade started from
+  Add/Remove Programs supplies the *default* `MV_*` values, and writing those over a working
+  configuration would take the server down. Pass `MV_RECONFIGURE=1` when you really do want the
+  configuration rewritten from the `MV_*` properties. The protected ACL is re-applied either way.
+- The service is stopped before its files are replaced and started again afterwards (`ServiceControl`
+  event `163`).
+
+See "Upgrading" below for what you still need to run by hand (`minivault migrate`).
 
 ### Windows (script)
 
@@ -100,10 +128,14 @@ Or with a certificate already imported into a machine store:
   -CertificateThumbprint 0123456789ABCDEF0123456789ABCDEF01234567
 ```
 
+**Re-running it upgrades in place.** When the service already exists the script stops it before Step 1
+(`robocopy /MIR` cannot replace a running executable), and Step 5 reconfigures it with `sc.exe config`
+instead of creating it. `-WhatIfMode` says which of the two will happen
+(`(service exists -> stop/config)`). The same command line therefore installs and upgrades.
+
 For a strictly ordered rollout — grant the SQL login before the service ever tries to start — pass
-`-SkipServiceStart`. The script prints the SQL grant script (a `CREATE LOGIN`/`CREATE USER`/`ALTER
-ROLE db_owner` script for the service account) right before it would otherwise start the service; run
-that on the target SQL Server, then start the service yourself:
+`-SkipServiceStart`. The script prints the SQL grant script right before it would otherwise start the
+service; run that on the target SQL Server, then start the service yourself:
 
 ```powershell
 .\install.ps1 -SourceDir C:\publish\minivault -ConnectionString "..." -CertificateThumbprint ... -SkipServiceStart
@@ -114,6 +146,43 @@ sc.exe start KarmasisMiniVault
 `-SkipInit` skips vault creation entirely (files, config, ACLs and the service are still installed);
 it is for restoring an existing vault onto a new host rather than creating one — see "Backup and
 restore" below.
+
+**Least-privilege SQL grants.** The script prints two scripts, not one. The *running service* only
+reads and writes rows, so it needs `db_datareader` + `db_datawriter` and nothing more:
+
+```sql
+CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS;
+CREATE USER  [NT AUTHORITY\SYSTEM] FOR LOGIN [NT AUTHORITY\SYSTEM];
+ALTER ROLE db_datareader ADD MEMBER [NT AUTHORITY\SYSTEM];
+ALTER ROLE db_datawriter ADD MEMBER [NT AUTHORITY\SYSTEM];
+```
+
+Schema changes belong to the *operator* who runs `minivault init` / `minivault migrate`, not to the
+service: give that account `db_ddladmin` (enough for `migrate` on an existing schema) or `db_owner`
+(needed the first time, when `init` creates the schema), and revoke it again afterwards if your policy
+requires least privilege at rest.
+
+**Exit codes.** `0` success, `1` bad input or a failed step, `2` the service was installed and started
+but `https://localhost:<port>/v1/health` did not answer within 30 seconds. Exit 2 usually means the SQL
+grant has not been applied yet, the certificate is wrong, or the vault is not initialized — check the
+Windows Application event log. Pass `-IgnoreHealthCheck` to downgrade it to a warning (exit 0), for
+example when the grant is applied later in the rollout.
+
+**Service account rights.** A `-ServiceAccount` that is not one of the built-in identities needs
+`SeServiceLogonRight` ("Log on as a service"), or the Service Control Manager refuses to start it with
+error **1069**. The script grants it with `secedit` after creating or reconfiguring the service; pass
+`-SkipLogonRightGrant` when Group Policy already manages that right (a local grant would be overwritten
+at the next policy refresh anyway).
+
+**Passwords never go on a command line where that can be avoided.** `-MasterKeyPassword` is handed to
+`minivault.exe init` through the `MINIVAULT_INIT_MASTER_KEY` environment variable (`--master-key-from-env`),
+and a *new* service with `-ServiceAccountPassword` is created with `New-Service -Credential`, which
+passes the password through the Win32 API. Reconfiguring an *existing* service is the one exception:
+`sc.exe config password= ...` is the only way Windows offers, so the password does appear on that
+command line — visible to anything that can list processes, and to command-line auditing (Event ID
+4688). The script prints a warning when it does this. `-MasterKeyPassword`, `-CertificatePassword` and
+`-ServiceAccountPassword` are rejected up front if they contain a double quote, which cannot survive
+the re-quoting on the way to a child process.
 
 Uninstall:
 
@@ -136,11 +205,12 @@ Build the image, generate a certificate, initialize, then run:
 # CI builds instead pass a private-feed NuGet config as a build arg:
 #   docker build -f docker/Dockerfile --build-arg NUGET_CONFIG=nuget-dev.config -t karmasis/minivault:ci .
 
-# Generate a self-signed PFX for local/dev use (PowerShell):
-$pwd = ConvertTo-SecureString -String "change-me" -Force -AsPlainText
+# Generate a self-signed PFX for local/dev use (PowerShell). Note: not $pwd - that is PowerShell's
+# built-in alias for the current directory, and assigning to it breaks Get-Location.
+$pfxPassword = ConvertTo-SecureString -String "change-me" -Force -AsPlainText
 $cert = New-SelfSignedCertificate -DnsName "localhost" -CertStoreLocation "cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(2)
 New-Item -ItemType Directory -Force -Path .\docker\certs | Out-Null
-Export-PfxCertificate -Cert $cert -FilePath .\docker\certs\minivault.pfx -Password $pwd | Out-Null
+Export-PfxCertificate -Cert $cert -FilePath .\docker\certs\minivault.pfx -Password $pfxPassword | Out-Null
 Remove-Item "cert:\CurrentUser\My\$($cert.Thumbprint)"
 
 # Initialize (one-shot job, profile "init"):
@@ -158,12 +228,21 @@ docker compose -f docker/docker-compose.yml logs -f minivault
 
 Notes:
 
-- The container runs as a non-root user (uid 1654); the mounted PFX must be readable by it
-  (`chmod 644 certs/minivault.pfx`).
+- The container runs as a non-root user (uid 1654). Give the mounted PFX to that uid rather than to
+  everyone: `chown 1654:1654 docker/certs/minivault.pfx && chmod 640 docker/certs/minivault.pfx`. A
+  world-readable `644` also works, but the PFX password is in `docker/.env` next to it, so the pair is
+  worth keeping off other local accounts.
 - `minivault-init`'s stdout is the only place the master key and recovery material appear (with
   `MasterKey__Provider=Environment`, which cannot store the key itself). Copy the master key into
-  `docker/.env` as `MINIVAULT__MASTERKEY` and the recovery key/shares into your own safe storage,
-  then clear the init container's log: `docker compose -f docker/docker-compose.yml --profile init rm -f minivault-init`.
+  `docker/.env` as `MINIVAULT__MASTERKEY` and the recovery key/shares into your own safe storage.
+  `docker compose run --rm` already deletes the init container, so there is no container log left to
+  clear — the value survives only in your terminal scrollback and in whatever your shell records.
+- **`MINIVAULT__MASTERKEY` is an environment variable of the running container, so
+  `docker inspect minivault` prints it in clear text**, as does anything that reads
+  `/proc/<pid>/environ` on the host. Everyone with access to the Docker socket therefore has the
+  master key. That is inherent to `MasterKey:Provider=Environment`; keep the socket restricted, and
+  prefer a real secret store (or the Windows DPAPI provider) for anything beyond a single-tenant
+  host.
 - Both services declare `extra_hosts: ["host.docker.internal:host-gateway"]` so a host SQL Server is
   reachable as `host.docker.internal` from a plain Linux Docker engine (a no-op, but harmless, on
   Docker Desktop, where that name already resolves).
@@ -190,7 +269,8 @@ minivault init --recovery shamir --shares 5 --threshold 3 --master-key "my passp
 |---|---|
 | `--recovery single\|shamir` | One recovery key, or `shares` Shamir shares of which any `threshold` recover. |
 | `--shares n --threshold k` | Shamir only. `2 ≤ k ≤ n ≤ 255`. Recommended minimum: 3 shares, threshold 2. |
-| `--master-key <password>` | Derive the master key from a password (PBKDF2, salt and iteration count are stored in the database). Without it a random key is generated. The password is used only to derive the key at this moment; it is **not** a way back in later — if the master key file or environment value is lost, only the recovery material helps. Passing it on the command line exposes it to shell history and process listings; prefer omitting it (random key) or run the command from the installer. |
+| `--master-key <password>` | Derive the master key from a password (PBKDF2, salt and iteration count are stored in the database). Without it a random key is generated. The password is used only to derive the key at this moment; it is **not** a way back in later — if the master key file or environment value is lost, only the recovery material helps. **Interactive use only:** the password is on the command line, so anything that can list processes — and command-line auditing (Event ID 4688) — can read it. |
+| `--master-key-from-env` | Same as `--master-key`, but the password is read from the `MINIVAULT_INIT_MASTER_KEY` environment variable and removed from the process's environment as soon as it has been read, so it never reaches a command line. This is what `install.ps1` and the MSI use. Mutually exclusive with `--master-key`. |
 | `--out <file>` | Also write the output to a file. Delete the file after the material is stored safely. The file is created with permissions for the current user only and is never overwritten; delete it after the material is stored safely. |
 | `--force` | Overwrite a master key that already exists in the provider. Without it, `init` refuses so that another vault on the same host does not lose its key. |
 
@@ -429,7 +509,7 @@ The server listens on HTTPS only; there is no plain-HTTP endpoint. Configuration
 
 | Key | Default | Notes |
 |---|---|---|
-| `Tls:Url` | `https://0.0.0.0:8200` | The single endpoint Kestrel binds. The host must be an IP literal — `0.0.0.0`, `::`, `localhost`, or a specific address — not a DNS name; Kestrel registers this endpoint explicitly, so `ASPNETCORE_URLS`/`--urls`/`Kestrel:Endpoints` are ignored. |
+| `Tls:Url` | `https://0.0.0.0:8200` | The single endpoint Kestrel binds. The host must be an IP literal — `0.0.0.0`, `::`, `localhost`, or a specific address — not a DNS name. `ASPNETCORE_URLS`, `--urls` and `ASPNETCORE_HTTP_PORTS` are **ignored** (a warning is logged for `ASPNETCORE_URLS`), and `Kestrel:Endpoints`/`Kestrel:EndpointDefaults` are **rejected**: startup fails with `Kestrel:Endpoints is not supported: MiniVault listens only on Tls:Url over HTTPS.` rather than silently ignoring configuration that an operator expects to add a listener — most dangerously a plain-HTTP one. |
 | `Tls:Certificate:Path` / `Tls:Certificate:Password` | `null` | Load the server certificate from a PFX file. |
 | `Tls:Certificate:Thumbprint` | `null` | Load the server certificate (with its private key) from a certificate store instead of a file. |
 | `Tls:Certificate:StoreName` / `Tls:Certificate:StoreLocation` | `My` / `LocalMachine` | Where to look up `Thumbprint`. `StoreLocation` is `LocalMachine` or `CurrentUser`. |
@@ -562,12 +642,16 @@ apply any pending schema changes yourself with `minivault migrate` before starti
 
 ### Windows
 
-1. Stop the service: `sc.exe stop KarmasisMiniVault` (or let the MSI upgrade do this for you).
-2. Replace the files — either run the new MSI (an MSI upgrade replaces `APPDIR` and skips `init`, as
-   described above) or `robocopy` a fresh `dotnet publish` output over the install directory, as
-   `install.ps1` step 1 does.
-3. Run `minivault.exe migrate` from the install directory.
-4. Start the service: `sc.exe start KarmasisMiniVault`.
+1. Stop the service: `sc.exe stop KarmasisMiniVault`. The MSI and a re-run of `install.ps1` both do
+   this for you.
+2. Replace the files — run the new MSI (it replaces `APPDIR`, skips `init`, and keeps the existing
+   `%ProgramData%\MiniVault\appsettings.json` unless `MV_RECONFIGURE=1`), or re-run `install.ps1`
+   with the same arguments (it stops the service, `robocopy /MIR`s the new publish output over the
+   install directory, and reconfigures the existing service instead of creating it).
+3. Run `minivault.exe migrate` from the install directory. The operator account running it needs DDL
+   rights on the database — the service account itself only has `db_datareader`/`db_datawriter`.
+4. Start the service: `sc.exe start KarmasisMiniVault`. The MSI does this itself; `install.ps1` does
+   too, unless `-SkipServiceStart` was passed.
 
 ### Docker
 
@@ -592,8 +676,14 @@ running server loads data keys once at startup and does not see a new version un
 
 ### Startup refusals
 
-The service logs a single critical line and exits when any of these checks fails. TLS is checked
-before the vault, so a certificate problem is reported even when the vault itself is fine.
+The service logs a single critical line — `MiniVault cannot start: <reason>` — and **exits with code
+3** when any of these checks fails. No stack trace is printed: the reason is the message. TLS is
+checked before the vault, so a certificate problem is reported even when the vault itself is fine.
+
+Where to read that line: `sc.exe query KarmasisMiniVault` for the state, the Windows Application event
+log for the message, `docker logs <container>` for a container. `install.ps1` exits `2` (not 3) when it
+installed the service successfully but the health endpoint never answered — the service's own exit code
+is what says why.
 
 | Message (abbreviated) | Cause | Fix |
 |---|---|---|
@@ -604,7 +694,30 @@ before the vault, so a certificate problem is reported even when the vault itsel
 | `Tls:AllowDevelopmentCertificate is only allowed in the Development environment...` | `Tls:AllowDevelopmentCertificate=true` outside `ASPNETCORE_ENVIRONMENT=Development`. | Configure a real `Tls:Certificate:Path`/`Thumbprint`; never set `Tls:AllowDevelopmentCertificateOutsideDevelopment` for a real deployment. |
 | `Could not load the TLS certificate from '<path>'. Check that the file exists and that Tls:Certificate:Password is correct.` | Bad PFX path or wrong password. | Fix `Tls:Certificate:Path`/`Password`. |
 | `No certificate with thumbprint '<thumb>' and a private key was found in <location>\<store>.` | The thumbprint is not installed in the configured store, or is installed without its private key. | Import the certificate (with its private key) into the configured store, or fix the thumbprint/`StoreLocation`. |
+| `Kestrel:Endpoints is not supported: MiniVault listens only on Tls:Url over HTTPS.` | `Kestrel:Endpoints` or `Kestrel:EndpointDefaults` is set in configuration. MiniVault binds one HTTPS endpoint explicitly and would ignore them, so it refuses to start rather than leave you believing an extra (possibly plain-HTTP) listener exists. | Remove the `Kestrel` endpoint configuration and set `Tls:Url` instead. |
+| `Database is not reachable. Check ConnectionStrings:MiniVault.` | The SQL connection failed at startup (wrong instance, no network route, no login for the service account). | Check the connection string, that the SQL login exists (see the grants `install.ps1` prints), and that the service account can reach the instance. |
 | `Expected exactly one active data key, found <N>.` | Zero or more than one `DataKeys` row has `IsActive = 1` — normally impossible (the schema has a filtered unique index on it) unless the table was edited by hand. | Fix the `DataKeys` table so exactly one row is active; if this happens without manual edits, treat it as a bug and preserve the database for investigation. |
+
+### The service will not start at all
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `sc.exe start` fails with **error 1069** ("The service did not start due to a logon failure") | The service account has no `SeServiceLogonRight`, or its password is wrong/expired. | Re-run `install.ps1` (it grants the right with `secedit` unless `-SkipLogonRightGrant` is passed), or grant it by hand: `secpol.msc` > Local Policies > User Rights Assignment > **Log on as a service**. Then confirm the password with `sc.exe config <name> obj= <account> password= <password>`. |
+| The service starts and immediately stops, exit code **3** | A startup refusal — see the table above. | Read `MiniVault cannot start: ...` in the Windows Application event log. |
+| The MSI installs but leaves the service stopped | An MSI built before this fix used `ServiceControl` event `160`, which has no start-on-install bit. | Rebuild the MSI from the current `.aip` (event `163`), or start the service by hand once. |
+
+### MSI validation (ICE) notes
+
+Advanced Installer runs the standard ICE validation suite when it builds the package. Two things in
+this project exist to keep it quiet, and should not be "simplified" away:
+
+- Every component carries the 64-bit attribute (`256`), because the package is `MsiPackageType="x64"`.
+  Without it **ICE80** fails the build and the registry rows would be redirected into `WOW6432Node`.
+- `minivault.exe` is a static `MsiFilesComponent` row and is *excluded* from the synchronized folder,
+  so exactly one component owns the file (**ICE30**: two components installing the same file to the
+  same directory). The service rows need a named component whose `KeyPath` is that file, and the
+  components a synchronized folder generates at build time have names nothing in the project can
+  reference.
 
 ### Health and 503s
 

@@ -50,10 +50,12 @@ self-signed dev certificate works fine.
 **PowerShell** (Windows host):
 
 ```powershell
-$pwd = ConvertTo-SecureString -String "change-me" -Force -AsPlainText
+# Not $pwd: that is PowerShell's built-in alias for the current directory, and assigning to it
+# breaks Get-Location for the rest of the session.
+$pfxPassword = ConvertTo-SecureString -String "change-me" -Force -AsPlainText
 $cert = New-SelfSignedCertificate -DnsName "localhost" -CertStoreLocation "cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(2)
 New-Item -ItemType Directory -Force -Path .\docker\certs | Out-Null
-Export-PfxCertificate -Cert $cert -FilePath .\docker\certs\minivault.pfx -Password $pwd | Out-Null
+Export-PfxCertificate -Cert $cert -FilePath .\docker\certs\minivault.pfx -Password $pfxPassword | Out-Null
 Remove-Item "cert:\CurrentUser\My\$($cert.Thumbprint)"
 ```
 
@@ -69,8 +71,16 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 730 -nodes \
 
 `docker/certs/` is mounted read-only at `/certs` by the `minivault` service; do not
 commit real certificates or passwords (`docker/certs/` and `docker/.env` are
-git-ignored). The container runs as a non-root user (uid 1654), so the PFX must be
-readable by it: `chmod 644 certs/minivault.pfx`.
+git-ignored). The container runs as a non-root user (uid 1654), so the PFX has to be
+readable by that uid — give it to the uid rather than to everyone:
+
+```bash
+chown 1654:1654 docker/certs/minivault.pfx
+chmod 640 docker/certs/minivault.pfx
+```
+
+(`chmod 644` also works, but the PFX password lives in `docker/.env` right next to the
+file, so the pair is worth keeping off other local accounts.)
 
 ## 3. Initialize
 
@@ -93,15 +103,18 @@ Copy the master key into `docker/.env` as `MINIVAULT__MASTERKEY`. Store the reco
 key/shares somewhere safe outside the container (a password manager, sealed
 envelopes for the shares, etc.) - they are not retrievable again.
 
-**The master key is plaintext in `docker logs` until you clear it.** Once you have
-copied it into your secret store, remove the init container and prune its log:
+`docker compose run --rm` deletes the init container as it exits, so there is no
+container log left to clear: the master key survives only in your terminal scrollback
+and in whatever your shell or terminal multiplexer records. Clear that, and do not
+paste the output into a ticket.
 
-```powershell
-docker compose -f docker/docker-compose.yml --profile init rm -f minivault-init
-```
-
-(`docker compose run --rm` already removes the container on exit; this is only
-needed if you kept it around or want to be sure no scrollback/log driver retains it.)
+**`MINIVAULT__MASTERKEY` is an environment variable of the running `minivault`
+container**, which means `docker inspect minivault` prints it in clear text, as does
+reading `/proc/<pid>/environ` on the host. Anyone with access to the Docker socket
+therefore has the master key. That is inherent to `MasterKey__Provider=Environment`
+(there is no OS-level key store in a Linux container the way DPAPI is on Windows):
+restrict the socket, and for anything beyond a single-tenant host prefer a real secret
+store or the Windows DPAPI provider.
 
 ## 4. Run
 
