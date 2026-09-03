@@ -17,3 +17,10 @@ packages/*
 # Docker local secrets (the .env.example template stays tracked).
 docker/.env
 docker/certs/
+
+# Advanced Installer build output and the scratch files verify-aip.ps1 -Build / the designer leave
+# next to the project (the .aip itself stays tracked).
+setups/AdvancedInstaller/Karmasis.MiniVault/Setup Files/
+setups/AdvancedInstaller/Karmasis.MiniVault/*-cache/
+setups/AdvancedInstaller/Karmasis.MiniVault/*.check.aip
+setups/AdvancedInstaller/Karmasis.MiniVault/*.back(*).aip

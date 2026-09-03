@@ -569,6 +569,12 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
 - Recovery material yine `%ProgramData%\MiniVault\recovery-<timestamp>.txt` dosyasına yazılır;
   deferred action UI'a taşıyamaz. `VerifyReadyDlg` özet, `ExitDialog` "dosyayı kopyala ve sil" notu
   gösterir.
-- Sayfalar designer'da henüz açılmadı ve MSI derlenmedi. İlk designer oturumunda doğrulanacaklar
-  `setups/AdvancedInstaller/README.md` "Dialogs" bölümünde; statik kontroller `verify-aip.ps1`
-  bölüm 6'da.
+- `.aip`, Advanced Installer 24.0 komut satırıyla MSI'a derleniyor (`verify-aip.ps1 -Build`);
+  yükleyici hataları (boş `Property.Value`, `MsiLockPermComponent` şeması, eksik
+  `AI_*_SETUPEXEPATH` action'ları, `MINIVA~1.EXE|minivault.exe` dosya adı) giderildi ve her biri
+  için script'e kontrol eklendi. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
+  `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
+  doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);
+  derlemeyi durdurmaz. MSI henüz hiçbir makineye kurulmadı, sayfalar görsel olarak incelenmedi;
+  kalan liste `setups/AdvancedInstaller/README.md` "Dialogs".

@@ -97,7 +97,7 @@
          this file, and the components a synchronized folder creates at build time have generated
          names that nothing here could reference. Every other file in the publish output does come
          from the synchronized folder. -->
-    <ROW File="minivault.exe" Component_="minivault.exe" FileName="minivault.exe" Attributes="0" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64\minivault.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="minivault.exe" Component_="minivault.exe" FileName="MINIVA~1.EXE|minivault.exe" Version="65535.65535.65535.65535" Attributes="0" SourcePath="..\..\..\src\MiniVault.Server\bin\publish\win-x64\minivault.exe" SelfReg="false" DigSign="true"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatCompsComponent">
     <ROW Feature_="MainFeature" Component_="APPDIR"/>
@@ -110,12 +110,14 @@
     <ROW Directory_="APPDIR" Component_="APPDIR" ManualDelete="true"/>
     <ROW Directory_="MiniVaultData_Dir" Component_="MiniVaultData"/>
   </COMPONENT>
-  <COMPONENT cid="caphyon.advinst.msicomp.MsiLockPermissionsComponent">
-    <!-- 268435456 = GENERIC_ALL. SIDs are used instead of names because the group names are
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiLockPermComponent">
+    <!-- Exactly what 'AdvancedInstaller.com /edit ... /AddFolderPermission <dir> -username <SID> -full_control'
+         writes: component id MsiLockPermComponent, Permission 2032127 = FILE_ALL_ACCESS (0x1F01FF),
+         Flags 0, no Domain column. SIDs are used instead of names because the group names are
          localized. The WriteMachineConfig custom action applies the same two ACEs (plus a
          read/execute ACE for a non-LocalSystem service account) after the files are installed. -->
-    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" Domain="" User="S-1-5-18" Permission="268435456"/>
-    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" Domain="" User="S-1-5-32-544" Permission="268435456"/>
+    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" User="S-1-5-18" Permission="2032127" Flags="0"/>
+    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" User="S-1-5-32-544" Permission="2032127" Flags="0"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiServInstComponent">
     <!-- Password is empty for the built-in accounts (LocalSystem, NT AUTHORITY\NetworkService, ...) and
@@ -175,6 +177,8 @@
          DLL on disk) and before InstallInitialize, so a value that cannot survive CustomActionData
          (anything containing a double quote) is rejected before a single file is installed. -->
     <ROW Action="ValidateProperties" Type="1" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_4"/>
+    <ROW Action="AI_BACKUP_AI_SETUPEXEPATH" Type="51" Source="AI_SETUPEXEPATH_ORIGINAL" Target="[AI_SETUPEXEPATH]"/>
+    <ROW Action="AI_RESTORE_AI_SETUPEXEPATH" Type="51" Source="AI_SETUPEXEPATH" Target="[AI_SETUPEXEPATH_ORIGINAL]"/>
     <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>
     <ROW Action="AI_DoRemoveExternalUIStub" Type="3585" Source="ExternalUICleaner.dll" Target="DoRemoveExternalUIStub" WithoutSeq="true"/>
     <ROW Action="AI_DpiContentScale" Type="1" Source="aicustact.dll" Target="DpiContentScale"/>
@@ -307,8 +311,9 @@
     <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryRecoverySingle" Type="Text" X="12" Y="157" Width="348" Height="12" Attributes="196611" Text="Recovery: single recovery key" Order="2300"/>
     <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryRecoveryShamir" Type="Text" X="12" Y="157" Width="348" Height="12" Attributes="196611" Text="Recovery: Shamir shares, [MV_THRESHOLD] of [MV_SHARES] needed" Order="2400"/>
     <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryNote" Type="Text" X="12" Y="175" Width="348" Height="36" Attributes="196611" Text="The recovery material will be written to %ProgramData%\MiniVault\recovery-&lt;timestamp&gt;.txt. The SQL Server connection string is not repeated here because it may contain a password." Order="2500"/>
-    <!-- ExitDialog: the one thing the operator must do before walking away. Overlaid on the theme's full-page bitmap, so it starts at x=135 like the standard text. -->
-    <ROW Dialog_="ExitDialog" Control="MvRecoveryNote" Type="Text" X="135" Y="105" Width="220" Height="100" Attributes="196611" Text="Before you close this window: open %ProgramData%\MiniVault (Administrators only), copy the contents of recovery-&lt;timestamp&gt;.txt to a safe offline location, then delete the file. It cannot be shown again. Also grant the service account db_datareader and db_datawriter on the MiniVault database if you have not yet (see docs/operations.md)." Order="2000"/>
+    <!-- ExitDialog: the one thing the operator must do before walking away. Overlaid on the theme's full-page bitmap, so it
+         starts at x=135 like the standard text, below the theme's Description (y 95..115, checked in the built MSI's Control table). -->
+    <ROW Dialog_="ExitDialog" Control="MvRecoveryNote" Type="Text" X="135" Y="120" Width="220" Height="100" Attributes="196611" Text="Before you close this window: open %ProgramData%\MiniVault (Administrators only), copy the contents of recovery-&lt;timestamp&gt;.txt to a safe offline location, then delete the file. It cannot be shown again. Also grant the service account db_datareader and db_datawriter on the MiniVault database if you have not yet (see docs/operations.md)." Order="2000"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiControlConditionComponent">
     <!-- Evaluated when a page is (re)built; the check boxes trigger [AiRefreshDlg]=1 so these follow them. -->

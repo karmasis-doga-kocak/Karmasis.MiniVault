@@ -165,10 +165,10 @@ self-contained folder. `deploy/windows/install.ps1` copies it into place, writes
 script, and registers and starts the `KarmasisMiniVault` service. Re-running it upgrades in place.
 The MSI in `setups/AdvancedInstaller` does the same work from `MV_*` properties, with a four-page
 wizard (SQL connection, service account and master key, HTTPS certificate, recovery mode) for an
-interactive first install. It is authored only: the `.aip`, its dialogs and its custom actions exist
-and the custom actions are tested, while the MSI itself has never been built — that needs a machine
-with Advanced Installer, and the first designer session has a short verification list in
-`setups/AdvancedInstaller/README.md`.
+interactive first install. The `.aip` builds into an MSI with Advanced Installer's command line
+(`setups/AdvancedInstaller/verify-aip.ps1 -Build`) and the custom actions are tested, but the MSI
+has not been installed on any machine and the pages have not been looked at yet; the remaining
+checks are listed in `setups/AdvancedInstaller/README.md`.
 
 **Docker.** `docker/Dockerfile` builds a Linux image on `mcr.microsoft.com/dotnet/aspnet:10.0` that
 runs as a non-root user, takes its master key from `MINIVAULT__MASTERKEY`, and mounts a PFX for TLS.

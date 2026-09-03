@@ -1,7 +1,8 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Static checks on Karmasis.MiniVault.aip. Does NOT build an MSI (that needs Advanced Installer).
+    Static checks on Karmasis.MiniVault.aip, plus (with -Build) a real build through the Advanced
+    Installer command line when the product is installed on this machine.
 
 .DESCRIPTION
     1. The .aip parses as XML and has the components the setup relies on.
@@ -14,8 +15,19 @@
        and (unless -SkipPayload) the built DLL is there.
     5. Every secret is hidden from the MSI log - the MV_* properties an operator types AND the
        CustomActionData property of every deferred managed custom action, which carries copies of
-       them - the properties the custom actions read exist, and the service is actually started on
-       install.
+       them - the properties the custom actions read exist, no Property row has an empty Value
+       (Advanced Installer refuses to open the project otherwise), and the service is actually
+       started on install.
+    6. The configuration dialogs: declared, with their chrome, unique control keys, bound properties
+       known, password edits hidden, check boxes in the CheckBox table, events resolving to known
+       dialogs/actions/properties, the page navigation both ways, the SQL test button sequence.
+    7. (-Build only) Copies the project to <name>.check.aip next to it and runs
+       'AdvancedInstaller.com /build' on the copy, so the real loader and validator get their say
+       without the designer touching the tracked file. Loader errors (schema, missing rows) fail the
+       check; AI_ICE validation lines are printed but do not fail it, because Advanced Installer
+       itself still produces the MSI (exit code 0) - AI_ICE07 in particular fires for every edit
+       control bound to a property without a default, which is every secret here by design.
+       The MSI lands in 'Setup Files\' next to the project (git-ignored), ready for a test install.
 
     Exits 0 when everything checks out, 1 otherwise.
 
@@ -24,13 +36,22 @@
 
 .EXAMPLE
     .\setups\AdvancedInstaller\verify-aip.ps1 -SkipPayload
+
+.EXAMPLE
+    .\setups\AdvancedInstaller\verify-aip.ps1 -Build
 #>
 [CmdletBinding()]
 param(
     [string]$AipPath,
 
     # Skip the checks that need 'dotnet publish' / a built custom-actions assembly.
-    [switch]$SkipPayload
+    [switch]$SkipPayload,
+
+    # Also build the MSI with AdvancedInstaller.com (needs Advanced Installer on this machine).
+    [switch]$Build,
+
+    # AdvancedInstaller.com to use for -Build; found under %ProgramFiles(x86)%\Caphyon when omitted.
+    [string]$AdvancedInstallerCom
 )
 
 Set-StrictMode -Version Latest
@@ -77,7 +98,7 @@ $requiredComponents = @(
     'caphyon.advinst.msicomp.MsiCompsComponent',
     'caphyon.advinst.msicomp.MsiFilesComponent',
     'caphyon.advinst.msicomp.MsiCreateFolderComponent',
-    'caphyon.advinst.msicomp.MsiLockPermissionsComponent',
+    'caphyon.advinst.msicomp.MsiLockPermComponent',
     'caphyon.advinst.msicomp.MsiServInstComponent',
     'caphyon.advinst.msicomp.MsiServCtrlComponent',
     'caphyon.advinst.msicomp.MsiCustActComponent',
@@ -612,6 +633,64 @@ foreach ($row in $conditionRows) {
     }
 }
 Write-Ok "$($conditionRows.Count) control conditions reference existing controls (unless reported above)"
+
+# ---------------------------------------------------------------------------
+# 7. Build with Advanced Installer (-Build)
+# ---------------------------------------------------------------------------
+if ($Build) {
+    Write-Section '7. Build with AdvancedInstaller.com'
+
+    if ([string]::IsNullOrWhiteSpace($AdvancedInstallerCom)) {
+        $caphyon = Join-Path ${env:ProgramFiles(x86)} 'Caphyon'
+        $candidates = @()
+        if (Test-Path -LiteralPath $caphyon) {
+            $candidates = @(Get-ChildItem -LiteralPath $caphyon -Directory -Filter 'Advanced Installer*' |
+                Sort-Object Name -Descending |
+                ForEach-Object { Join-Path $_.FullName 'bin\x86\AdvancedInstaller.com' } |
+                Where-Object { Test-Path -LiteralPath $_ })
+        }
+        if ($candidates.Count -gt 0) { $AdvancedInstallerCom = $candidates[0] }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($AdvancedInstallerCom) -or -not (Test-Path -LiteralPath $AdvancedInstallerCom)) {
+        Write-Fail 'AdvancedInstaller.com not found (install Advanced Installer, or pass -AdvancedInstallerCom)'
+    } else {
+        Write-Ok "using $AdvancedInstallerCom"
+
+        # Build a copy: /build may convert and normalize the project; the tracked file stays untouched.
+        $resolvedAip = (Resolve-Path -LiteralPath $AipPath).Path
+        $checkAip = [System.IO.Path]::Combine(
+            [System.IO.Path]::GetDirectoryName($resolvedAip),
+            [System.IO.Path]::GetFileNameWithoutExtension($resolvedAip) + '.check.aip')
+        Copy-Item -LiteralPath $resolvedAip -Destination $checkAip -Force
+
+        $output = & $AdvancedInstallerCom /build $checkAip 2>&1 | ForEach-Object { "$_" }
+        $buildExit = $LASTEXITCODE
+
+        $iceLines = @($output | Where-Object { $_ -match 'AI_ICE\d+' })
+        $errorLines = @($output | Where-Object { $_ -match '^ERROR:|^Error:' -and $_ -notmatch 'AI_ICE\d+' })
+        $otherLines = @($output | Where-Object { $_ -notmatch '^Notification: File added' -and $_ -notmatch 'AI_ICE\d+' -and $_.Trim() })
+
+        foreach ($line in $otherLines) { Write-Host "         $line" -ForegroundColor DarkGray }
+        if ($iceLines.Count -gt 0) {
+            Write-Host "  [info] $($iceLines.Count) AI_ICE validation line(s) (do not fail the build):" -ForegroundColor Yellow
+            foreach ($line in $iceLines) { Write-Host "         $line" -ForegroundColor Yellow }
+        }
+
+        if ($buildExit -eq 0 -and $errorLines.Count -eq 0) {
+            $msiName = [System.IO.Path]::GetFileNameWithoutExtension($resolvedAip) + '.msi'
+            $built = @(Get-ChildItem -LiteralPath (Split-Path -Parent $resolvedAip) -Recurse -Filter $msiName -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+            if ($built.Count -eq 1) {
+                Write-Ok "AdvancedInstaller.com /build succeeded: $($built[0].FullName)"
+            } else {
+                Write-Ok 'AdvancedInstaller.com /build succeeded'
+            }
+        } else {
+            Write-Fail "AdvancedInstaller.com /build failed (exit $buildExit): $(@($errorLines + ($output | Select-Object -Last 1)) -join ' | ')"
+        }
+    }
+}
 
 # ---------------------------------------------------------------------------
 Write-Host ''

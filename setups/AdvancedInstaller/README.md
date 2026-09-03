@@ -11,24 +11,31 @@ The Windows MSI for the MiniVault server. It performs the same six steps as
 | `verify-aip.ps1` | Static checks on the `.aip` (no Advanced Installer needed). |
 | `img/` | Banner/background bitmaps and the icon, copied from the DAM Collector setup. |
 
-## Status: authored, not built
+## Status: builds from the command line, not yet installed anywhere
 
-**The `.aip` has never been opened in the Advanced Installer designer and no MSI has been
-produced from it.** Advanced Installer is a licensed desktop product and is not installed on the
-machine where these files were written, so the project file was authored as XML against the
-schema used by
-`Karmasis.Classic.DataskopeCollector/setups/AdvancedInstaller/DAM.Collector/DAM.Collector.aip`
-(Advanced Installer 22.8). `verify-aip.ps1` checks everything that can be checked without the
-product: XML well-formedness, the presence of the components the setup relies on, the custom
-action rows and their binaries, and that every source path in the project resolves to a file that
-exists after a publish, plus the configuration dialogs (section 6). The custom-actions assembly
-**is** built and unit-tested here; the dialogs are authored in the XML (see "Dialogs") and have not
-been rendered yet.
+The `.aip` was authored as XML (against the schema of
+`Karmasis.Classic.DataskopeCollector/setups/AdvancedInstaller/DAM.Collector/DAM.Collector.aip`,
+Advanced Installer 22.8) and **builds into an MSI with Advanced Installer 24.0's command line**
+(`verify-aip.ps1 -Build`, see "Build order"). The loader errors that surfaced on the way — an empty
+`Property.Value`, the `MsiLockPermComponent` schema, the missing `AI_*_SETUPEXEPATH` actions, the
+short|long `FileName` — are fixed and each has a check in `verify-aip.ps1`. The built MSI's
+`Dialog`, `Control`, `ControlEvent`, `ControlCondition` and `CheckBox` tables were inspected with the
+Windows Installer API: the four configuration pages, their navigation, the check-box refresh
+(`[AiRefreshDlg]` becomes a `NewDialog` to a generated `<Dialog>_1` clone and back) and the
+`FolderDlg`/`VerifyReadyDlg` overrides are all present and the theme fragment's default rows are
+gone. What has **not** happened yet: the MSI has not been installed on any machine, and nobody has
+looked at the pages — layout is by coordinates only.
 
-Expect the first designer session to normalize the file: Advanced Installer rewrites the `.aip`
-on save, materializes the standard dialog control rows out of the fragments, and regenerates
-component GUIDs for files it discovers through the synchronized folder. That is expected — commit
-the rewritten file.
+The build prints twenty `AI_ICE07` lines ("property associated to control ... does not have a
+default value"): one per edit/check box bound to a property that deliberately has no default (the
+connection string, every password, the PFX path/thumbprint, the UI-only check boxes). Advanced
+Installer still builds the package (exit code 0). They are noise here, and `verify-aip.ps1 -Build`
+prints them as `[info]`.
+
+Expect the first designer session to normalize the file: Advanced Installer converts it to the 24.0
+format (a `*.back(22.8).aip` backup appears next to it, git-ignored), materializes the standard
+dialog control rows out of the fragments, and regenerates component GUIDs for files it discovers
+through the synchronized folder. That is expected — commit the rewritten file.
 
 ## Build order
 
@@ -45,8 +52,11 @@ dotnet build setups\AdvancedInstaller\Karmasis.MiniVault.CustomActions\Karmasis.
 # 3. Sanity check before handing the project to Advanced Installer.
 .\setups\AdvancedInstaller\verify-aip.ps1
 
-# 4. The MSI itself - needs Advanced Installer on the machine.
+# 4. The MSI itself - needs Advanced Installer on the machine. Either directly:
 AdvancedInstaller.com /build setups\AdvancedInstaller\Karmasis.MiniVault\Karmasis.MiniVault.aip
+#    or through the check script, which builds a scratch copy (<name>.check.aip) so the tracked
+#    project is not converted/normalized by the build, and reports loader errors as failures:
+.\setups\AdvancedInstaller\verify-aip.ps1 -Build
 ```
 
 Step 4 writes `setups/AdvancedInstaller/Karmasis.MiniVault/Setup Files/Karmasis.MiniVault.msi`
@@ -303,26 +313,33 @@ UI-only properties: `MV_MASTERKEY_USEPASSWORD`, `MV_MASTERKEY_CONFIRM` (hidden f
 `MV_MASTERKEY`), `MV_CERT_USEPFX`, `MV_RECOVERY_ACK`, `MV_UI_ERROR`. None of them reaches a custom
 action; the existing `MV_*` contract is unchanged.
 
-### What the first designer session has to verify
+### What is verified, and what the first designer session still has to check
 
-The rows were written without the product, so the first time the `.aip` is opened in Advanced
-Installer, check these before building — `verify-aip.ps1` section 6 covers only what can be checked
-statically:
+Verified from the built MSI's tables (Windows Installer API, `verify-aip.ps1 -Build` output):
 
-1. **Sequence override.** The theme fragment still has `FolderDlg.Next → VerifyReadyDlg` and
-   `VerifyReadyDlg.Back → FolderDlg` at ordering 201; ours run at 202/203 and rely on the last
-   `NewDialog` winning (the same pattern the designer produced in InfraskopeServer). If the designer
-   shows both targets on `FolderDlg.Next`, delete the fragment's row or give it the `OLDPRODUCTS`
-   condition.
-2. **`[AiRefreshDlg]` from a check box.** Used to re-apply the Enable/Disable conditions after a
-   check box is toggled. If it has no effect, the dependent edits simply stay enabled — the Next
-   checks still hold — but it is worth confirming.
-3. **Text on `VerifyReadyDlg` / `ExitDialog`.** The summary rows start at y=115 and the exit note at
-   x=135, y=105, assumed from the classic theme's layout; adjust if they overlap the standard text.
-4. **Integer edits.** `MV_SHARES` / `MV_THRESHOLD` use the Integer attribute (19); the range
-   conditions compare a property with an integer literal, which MSI evaluates numerically.
-5. `ARPPRODUCTICON` from `img/ds-48.ico` (committed, not yet referenced) and MiniVault artwork in
+- **Sequence override.** In the package, `FolderDlg.Next` carries only our two `NewDialog` rows
+  (`SqlDlg` when `NOT OLDPRODUCTS`, `VerifyReadyDlg` when `OLDPRODUCTS`, orderings 202/203) plus
+  the theme's `SetTargetPath`; the fragment's default `FolderDlg.Next → VerifyReadyDlg` is not there.
+  Same for `VerifyReadyDlg.Back`. No double `NewDialog`.
+- **`[AiRefreshDlg]`.** Advanced Installer compiles it into `NewDialog <Dialog>_1`, a generated clone
+  of the page whose own refresh event points back at the original — that is what the `SqlDlg_1`,
+  `ServiceDlg_1`, `TlsDlg_1`, `RecoveryDlg_1` rows in the `Dialog` table are. The check boxes and the
+  test button therefore do rebuild the page, and the Enable/Disable conditions are re-evaluated.
+- **Placement.** `VerifyReadyDlg`'s theme text ends at y=110; our summary rows start at y=115.
+  `ExitDialog`'s theme `Description` occupies y=95..115; the recovery note starts at y=120 (it was
+  moved down after the first build showed the overlap).
+- **`LockPermissions`** has the two SID rows with `FILE_ALL_ACCESS`; `CheckBox` has the four rows.
+
+Still to check when someone opens the project in the designer or runs the MSI:
+
+1. **Looks.** Text heights were chosen by line count; a wrapped sentence may need a taller control.
+   Run the MSI (or open the page in the designer's preview) and read each page once.
+2. **Integer edits.** `MV_SHARES` / `MV_THRESHOLD` use the Integer attribute (19); the range
+   conditions compare a property with an integer literal, which MSI evaluates numerically. Confirm
+   that a non-numeric entry is refused by the control itself.
+3. `ARPPRODUCTICON` from `img/ds-48.ico` (committed, not yet referenced) and MiniVault artwork in
    place of the Collector bitmaps.
+4. A real install on a test VM: the pre-production checklist in `docs/operations.md`.
 
 There is no file-browse button for the PFX path: the classic theme has no reusable file dialog and a
 browse control would need `AI_` custom actions that this project does not ship. The path is typed.

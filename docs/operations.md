@@ -101,9 +101,10 @@ password, HTTPS certificate (store thumbprint or PFX file) and listen URL, recov
 or Shamir shares) with an acknowledgement that the recovery file will be copied and deleted. Each
 page validates on *Next* with the rules `WriteMachineConfig` and `RunInit` apply. The recovery
 material is still written to a file, not shown on screen (see below), and the finish page says so.
-On an upgrade the pages are skipped. The pages are authored in the `.aip` but have not yet been seen
-in the Advanced Installer designer or in a built MSI (`setups/AdvancedInstaller/README.md`,
-"Dialogs"); the silent install is the path that has been exercised.
+On an upgrade the pages are skipped. The MSI builds from the command line and its dialog tables have
+been inspected, but it has not been installed or looked at on any machine yet
+(`setups/AdvancedInstaller/README.md`, "Dialogs"); the silent install through `install.ps1` is the
+path that has been exercised.
 
 **Silent install**:
 
