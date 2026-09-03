@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
@@ -443,6 +444,114 @@ namespace Karmasis.MiniVault.CustomActions
             session.SetProperty(SqlOkProperty, ok ? "1" : "0");
             session.SetProperty(SqlErrorProperty, error ?? string.Empty);
             session.SetProperty(SqlNoteProperty, note ?? string.Empty);
+            // One line for the message box the SqlDlg "Test connection" button spawns.
+            session.SetProperty(SqlResultProperty, ok
+                ? (string.IsNullOrEmpty(note) ? "Connection succeeded." : "Connection succeeded. " + note)
+                : "Connection failed. " + (error ?? string.Empty));
+        }
+
+        internal const string SqlResultProperty = "MV_SQL_RESULT";
+
+        // -------------------------------------------------------------------
+        // BuildConnectionString (immediate)
+        // -------------------------------------------------------------------
+
+        internal const string SqlServerProperty = "MV_SQL_SERVER";
+        internal const string SqlDatabaseProperty = "MV_SQL_DATABASE";
+        internal const string SqlAuthProperty = "MV_SQL_AUTH";
+        internal const string SqlUserProperty = "MV_SQL_USER";
+        internal const string SqlPasswordProperty = "MV_SQL_PASSWORD";
+        internal const string SqlEncryptProperty = "MV_SQL_ENCRYPT";
+        internal const string SqlTrustCertProperty = "MV_SQL_TRUSTCERT";
+        internal const string SqlAdvancedProperty = "MV_SQL_ADVANCED";
+        internal const string ConnectionStringProperty = "MV_CONNECTIONSTRING";
+        internal const string DefaultDatabaseName = "MiniVault";
+
+        /// <summary>
+        /// Composes MV_CONNECTIONSTRING from the SqlDlg fields (MV_SQL_SERVER, MV_SQL_DATABASE, MV_SQL_AUTH =
+        /// windows|sql, MV_SQL_USER, MV_SQL_PASSWORD, MV_SQL_ENCRYPT, MV_SQL_TRUSTCERT) with
+        /// <see cref="SqlConnectionStringBuilder"/>, so the operator never types connection-string syntax.
+        /// Leaves MV_CONNECTIONSTRING alone when MV_SQL_ADVANCED is "1" (the operator typed the string) or when
+        /// MV_SQL_SERVER is empty (a silent install that passed MV_CONNECTIONSTRING directly). Immediate; never
+        /// fails the installation. Run by the SqlDlg buttons and, for silent installs that pass the parts
+        /// instead of the string, once in the execute sequence before ValidateProperties.
+        /// </summary>
+        public static int BuildConnectionString(string sessionHandle)
+        {
+            return BuildConnectionString(new MsiSession(sessionHandle));
+        }
+
+        internal static int BuildConnectionString(IMsiSession session)
+        {
+            try
+            {
+                if (IsTicked(session.GetProperty(SqlAdvancedProperty)))
+                {
+                    return (int)ActionResult.Success;
+                }
+
+                var server = NullIfBlank(session.GetProperty(SqlServerProperty));
+                if (server == null)
+                {
+                    return (int)ActionResult.Success;
+                }
+
+                // Composed by hand rather than with SqlConnectionStringBuilder.ConnectionString: that quotes a value
+                // containing ';' with DOUBLE quotes, and a double quote anywhere in MV_CONNECTIONSTRING is exactly what
+                // ValidateProperties has to reject (CustomActionData is a NAME="value" list). Single quotes, with an
+                // embedded single quote doubled, are the other quoting SqlClient accepts and survive that list.
+                var pairs = new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>("Data Source", server),
+                    new KeyValuePair<string, string>("Initial Catalog", NullIfBlank(session.GetProperty(SqlDatabaseProperty)) ?? DefaultDatabaseName)
+                };
+
+                var auth = (NullIfBlank(session.GetProperty(SqlAuthProperty)) ?? "windows").ToLowerInvariant();
+                if (auth == "sql")
+                {
+                    pairs.Add(new KeyValuePair<string, string>("User ID", NullIfBlank(session.GetProperty(SqlUserProperty)) ?? string.Empty));
+                    pairs.Add(new KeyValuePair<string, string>("Password", session.GetProperty(SqlPasswordProperty) ?? string.Empty));
+                }
+                else
+                {
+                    pairs.Add(new KeyValuePair<string, string>("Integrated Security", "True"));
+                }
+
+                pairs.Add(new KeyValuePair<string, string>("Encrypt", IsTicked(session.GetProperty(SqlEncryptProperty)) ? "True" : "False"));
+                pairs.Add(new KeyValuePair<string, string>("TrustServerCertificate", IsTicked(session.GetProperty(SqlTrustCertProperty)) ? "True" : "False"));
+
+                var composed = new StringBuilder();
+                foreach (var pair in pairs)
+                {
+                    composed.Append(pair.Key).Append('=').Append(QuoteConnectionStringValue(pair.Value)).Append(';');
+                }
+
+                session.SetProperty(ConnectionStringProperty, composed.ToString());
+                return (int)ActionResult.Success;
+            }
+            catch (Exception ex)
+            {
+                session.Log("MiniVault: could not compose the connection string: " + ex.Message, InstallMessage.INFO);
+                return (int)ActionResult.Success;
+            }
+        }
+
+        private static bool IsTicked(string value)
+        {
+            return !string.IsNullOrEmpty(value) && value.Trim() == "1";
+        }
+
+        /// <summary>
+        /// Quotes a connection-string value the way SqlClient reads it back: plain when it contains nothing
+        /// special, otherwise in single quotes with an embedded single quote doubled. Never emits a double quote.
+        /// </summary>
+        internal static string QuoteConnectionStringValue(string value)
+        {
+            value = value ?? string.Empty;
+            var needsQuotes = value.Length == 0
+                || value.IndexOfAny(new[] { ';', '\'', '"', '=' }) >= 0
+                || value[0] == ' ' || value[value.Length - 1] == ' ';
+            return needsQuotes ? "'" + value.Replace("'", "''") + "'" : value;
         }
 
         // -------------------------------------------------------------------

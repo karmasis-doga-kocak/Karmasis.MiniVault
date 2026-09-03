@@ -203,7 +203,10 @@ written to the MSI verbose log.
 | `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. Spaces and the certmgr left-to-right mark are stripped. |
 | `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
 | `MV_RECONFIGURE` | *(empty)* | `1` to overwrite an existing `%ProgramData%\MiniVault\appsettings.json`. Empty (the default) keeps it, so an upgrade never clobbers a working configuration. |
-| `MV_SQL_OK` / `MV_SQL_ERROR` | `0` / *(empty)* | Output of `TestSqlConnection`. |
+| `MV_SQL_OK` / `MV_SQL_ERROR` / `MV_SQL_NOTE` / `MV_SQL_RESULT` | `0` / *(empty)* | Output of `TestSqlConnection`. |
+| `MV_SQL_SERVER`, `MV_SQL_DATABASE`, `MV_SQL_AUTH`, `MV_SQL_USER`, `MV_SQL_PASSWORD`, `MV_SQL_ENCRYPT`, `MV_SQL_TRUSTCERT` | *(empty)*, `MiniVault`, `windows`, *(empty)*, *(empty)*, `1`, *(empty)* | The parts `BuildConnectionString` composes `MV_CONNECTIONSTRING` from — what the SQL page asks for. A silent install may pass these instead of `MV_CONNECTIONSTRING`: `BuildConnectionStringSilent` runs before `ValidateProperties` and composes the string whenever `MV_SQL_SERVER` is set (and `MV_SQL_ADVANCED` is not `1`); with `MV_SQL_SERVER` empty it leaves `MV_CONNECTIONSTRING` alone. `MV_SQL_AUTH` is `windows` or `sql`. |
+| `MV_SQL_ADVANCED` | *(empty)* | `1` = the SQL page's "enter the connection string directly" mode; `MV_CONNECTIONSTRING` is then used as typed. |
+| `MV_SERVICEACCOUNT_KIND` | `LocalSystem` | UI only: the service-account radio group (`LocalSystem` / `NetworkService` / `Custom`). The service page's Next translates it into `MV_SERVICEACCOUNT`; a silent install sets `MV_SERVICEACCOUNT` directly. |
 
 Only the properties with a default have a row in the Property table: `Value` is a required column and
 Advanced Installer refuses to open a project with an empty one ("Required column [Property.Value] has
@@ -234,6 +237,15 @@ msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log `
   MV_RECOVERY=shamir MV_SHARES=3 MV_THRESHOLD=2 `
   MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567 `
   MV_URL=https://0.0.0.0:8200
+```
+
+The same, passing the SQL connection as parts instead of a string (composed by
+`BuildConnectionStringSilent` before validation; `MV_SQL_AUTH=windows` needs no login):
+
+```powershell
+msiexec /i Karmasis.MiniVault.msi /qn `
+  MV_SQL_SERVER=sql01 MV_SQL_DATABASE=MiniVault MV_SQL_AUTH=sql MV_SQL_USER=minivault_setup MV_SQL_PASSWORD=... MV_SQL_TRUSTCERT=1 `
+  MV_CERT_THUMBPRINT=0123456789ABCDEF0123456789ABCDEF01234567
 ```
 
 With a PFX instead of a certificate from the store:
@@ -307,8 +319,8 @@ install never shows them and takes the same `MV_*` properties from the command l
 
 | Page | Inputs | Next-button checks |
 | --- | --- | --- |
-| `SqlDlg` | `MV_CONNECTIONSTRING` (multi-line edit); *Test connection* runs `TestSqlConnection` and shows "Connection succeeded." (plus `[MV_SQL_NOTE]` when the database does not exist yet and the install will create it) or `[MV_SQL_ERROR]`. | connection string not empty |
-| `ServiceDlg` | `MV_SERVICEACCOUNT` (default `LocalSystem`), `MV_SERVICEACCOUNT_PASSWORD`; check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | empty account → `LocalSystem`; with the box ticked the password is required and must match; unticked clears both |
+| `SqlDlg` | Laid out like SSMS's connect dialog: *Server name* (`MV_SQL_SERVER`), *Database* (`MV_SQL_DATABASE`, default `MiniVault`), *Authentication* radio group (`MV_SQL_AUTH` = `windows` / `sql`), *Login* / *Password* (`MV_SQL_USER`, `MV_SQL_PASSWORD`, enabled for `sql`), *Encrypt connection* (`MV_SQL_ENCRYPT`, default on), *Trust server certificate* (`MV_SQL_TRUSTCERT`). `BuildConnectionString` composes `MV_CONNECTIONSTRING` from them whenever a radio/check box changes, on *Test connection* and on *Next*; the composed string is shown read-only at the bottom. *Enter the connection string directly (advanced)* (`MV_SQL_ADVANCED`) disables the fields and makes that edit writable instead. *Test connection* then runs `TestSqlConnection` and shows `MV_SQL_RESULT` in a message box. | server name (or, in advanced mode, the string) not empty; a login for SQL Server Authentication |
+| `ServiceDlg` | *Service account* radio group (`MV_SERVICEACCOUNT_KIND` = `LocalSystem` / `NetworkService` / `Custom`); *Account* and *Account password* (`MV_SERVICEACCOUNT`, `MV_SERVICEACCOUNT_PASSWORD`) enabled for `Custom`; check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | Next writes `LocalSystem` / `NT AUTHORITY\NetworkService` into `MV_SERVICEACCOUNT` and clears the password for the built-in choices; `Custom` needs an account; with the master-key box ticked the password is required and must match, unticked clears both |
 | `TlsDlg` | `MV_URL`, `MV_CERT_THUMBPRINT`; check box *Use a PFX file* → `MV_CERT_PATH`, `MV_CERT_PASSWORD`. | URL not empty; exactly one certificate source (the other mode's properties are cleared on Next, so `MachineConfigWriter` never sees both) |
 | `RecoveryDlg` | check box *Split into Shamir shares* bound to `MV_RECOVERY` (ticked = `shamir`, unticked = cleared = single), `MV_SHARES`, `MV_THRESHOLD` (integer edits); acknowledgement check box `MV_RECOVERY_ACK`. | acknowledgement ticked; for shamir, shares and threshold each within 2..255 |
 | `VerifyReadyDlg` | adds a summary (service account, URL, certificate, recovery mode) on a first install; the connection string is not repeated because it may hold a password. | — |

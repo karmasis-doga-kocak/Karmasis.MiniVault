@@ -582,7 +582,15 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
 - `TestSqlConnection`: SQL 4060 ("Cannot open database") ilk kurulumda normaldir (`init` veritabanını
   yaratır). Action `master`'a bağlanıp `DB_ID` ve CREATE DATABASE yetkisine bakar: DB yok + yetki var →
   test geçer, `MV_SQL_NOTE` ile "kurulum oluşturacak" notu; DB var ama açılamıyor ya da yetki yok →
-  neden belirtilerek düşer. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  neden belirtilerek düşer.
+- SQL sayfası SSMS bağlantı ekranı gibi yeniden yazıldı: server, database, kimlik doğrulama radio
+  grubu (Windows / SQL Server; MSI ComboBox event yayınlayamadığı için RadioButtonGroup), login/şifre,
+  encrypt ve trust checkbox'ları, "connection string'i doğrudan gir" modu. Yeni immediate custom action
+  `BuildConnectionString` parçalardan `MV_CONNECTIONSTRING`'i tek tırnak kuralıyla üretir (çift tırnak
+  asla üretilmez); `BuildConnectionStringSilent` execute sequence'ta `ValidateProperties`'ten önce
+  koşar, böylece silent kurulum parçaları (`MV_SQL_*`) da verebilir. Servis sayfasında hesap seçimi
+  radio grubu (Local System / Network Service / This account, `MV_SERVICEACCOUNT_KIND`). Test sonucu
+  `MV_SQL_RESULT` ile mesaj kutusunda gösterilir. Custom action testleri: 74. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
   tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
   `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
   doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);

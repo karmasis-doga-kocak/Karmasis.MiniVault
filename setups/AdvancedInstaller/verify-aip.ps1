@@ -429,6 +429,9 @@ foreach ($listProperty in @('SecureCustomProperties', 'MsiHiddenProperties')) {
 if ($components.ContainsKey('caphyon.advinst.msicomp.MsiCheckBoxComponent')) {
     foreach ($row in @($components['caphyon.advinst.msicomp.MsiCheckBoxComponent'].ROW)) { $knownProperties[$row.Property] = $true }
 }
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiRadioButtonComponent')) {
+    foreach ($row in @($components['caphyon.advinst.msicomp.MsiRadioButtonComponent'].ROW)) { $knownProperties[$row.Property] = $true }
+}
 if ($components.ContainsKey('caphyon.advinst.msicomp.MsiControlEventComponent')) {
     foreach ($row in @($components['caphyon.advinst.msicomp.MsiControlEventComponent'].ROW)) {
         if ($row.Event -match '^\[(.+)\]$') { $knownProperties[$Matches[1]] = $true }
@@ -563,6 +566,17 @@ foreach ($row in $controlRows) {
         if ($row.Type -eq 'CheckBox' -and @($checkBoxRows | Where-Object { $_.Property -eq $bound }).Count -ne 1) {
             Write-Fail "check box $key has no CheckBox-table row for $bound (its ticked value would be undefined)"
         }
+        if ($row.Type -eq 'RadioButtonGroup') {
+            $radioRows = @()
+            if ($components.ContainsKey('caphyon.advinst.msicomp.MsiRadioButtonComponent')) {
+                $radioRows = @($components['caphyon.advinst.msicomp.MsiRadioButtonComponent'].ROW | Where-Object { $_.Property -eq $bound })
+            }
+            if ($radioRows.Count -lt 2) {
+                Write-Fail "radio button group $key has fewer than two RadioButton-table rows for $bound"
+            } elseif ($properties.ContainsKey($bound) -and @($radioRows | Where-Object { $_.Value -eq $properties[$bound] }).Count -ne 1) {
+                Write-Fail "radio button group ${key}: the default value '$($properties[$bound])' of $bound is not one of its buttons"
+            }
+        }
         if ($row.Type -eq 'Edit' -and ([int]$row.Attributes -band 0x200000) -and ($hiddenProperties -notcontains $bound)) {
             Write-Fail "password edit $key binds $bound, which is not in MsiHiddenProperties"
         }
@@ -632,13 +646,36 @@ foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg')) {
     }
 }
 
-# The SQL test button drives TestSqlConnection through its data setter and refreshes the page.
-$testEvents = @($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' } | Sort-Object { [int]$_.Ordering })
-$testSequence = @($testEvents | ForEach-Object { if ($_.Event -eq 'DoAction') { $_.Argument } else { $_.Event } }) -join ' > '
-if ($testSequence -eq 'AI_DATA_SETTER_2 > TestSqlConnection > [AiRefreshDlg]') {
+# A managed action run from a dialog needs its Type-51 data setter run right before it (that is how
+# DotNetMethodCaller learns which assembly/method to call). Check every DoAction to a managed action.
+$setterFor = @{}
+foreach ($setter in @($customActions | Where-Object { [int]$_.Type -eq 51 -and $_.Source -eq 'CustomActionData' })) {
+    foreach ($action in @($customActions | Where-Object { $_.PSObject.Properties.Name -contains 'AdditionalSeq' -and $_.AdditionalSeq -eq $setter.Action })) {
+        $setterFor[$action.Action] = $setter.Action
+    }
+}
+$dialogDoActions = @($eventRows | Where-Object { $_.Event -eq 'DoAction' -and $setterFor.ContainsKey($_.Argument) })
+foreach ($doAction in $dialogDoActions) {
+    $siblings = @($eventRows | Where-Object { $_.Dialog_ -eq $doAction.Dialog_ -and $_.Control_ -eq $doAction.Control_ } | Sort-Object { [int]$_.Ordering })
+    $index = [array]::IndexOf(@($siblings | ForEach-Object { "$($_.Event)|$($_.Argument)|$($_.Ordering)" }), "DoAction|$($doAction.Argument)|$($doAction.Ordering)")
+    $previous = if ($index -gt 0) { $siblings[$index - 1] } else { $null }
+    if ($null -ne $previous -and $previous.Event -eq 'DoAction' -and $previous.Argument -eq $setterFor[$doAction.Argument]) {
+        Write-Ok "$($doAction.Dialog_).$($doAction.Control_): $($setterFor[$doAction.Argument]) > $($doAction.Argument)"
+    } else {
+        Write-Fail "$($doAction.Dialog_).$($doAction.Control_) runs $($doAction.Argument) without DoAction $($setterFor[$doAction.Argument]) immediately before it"
+    }
+}
+# The SQL page must actually test something: compose, test, show the result.
+$testSequence = @($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'DoAction' } | Sort-Object { [int]$_.Ordering } | ForEach-Object { $_.Argument }) -join ' > '
+if ($testSequence -eq 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER_2 > TestSqlConnection') {
     Write-Ok "SqlDlg.TestButton: $testSequence"
 } else {
-    Write-Fail "SqlDlg.TestButton events are '$testSequence'; expected 'AI_DATA_SETTER_2 > TestSqlConnection > [AiRefreshDlg]'"
+    Write-Fail "SqlDlg.TestButton actions are '$testSequence'; expected 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER_2 > TestSqlConnection'"
+}
+if (@($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'SpawnDialog' -and $_.Argument -eq 'MvErrorDlg' }).Count -eq 1) {
+    Write-Ok 'SqlDlg.TestButton shows MV_SQL_RESULT in MvErrorDlg'
+} else {
+    Write-Fail 'SqlDlg.TestButton does not spawn MvErrorDlg with the test result'
 }
 
 # Control conditions reference existing controls.

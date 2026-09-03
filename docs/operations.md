@@ -80,6 +80,7 @@ properties (`MV_*`):
 | `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. |
 | `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
 | `MV_RECONFIGURE` | *(empty)* | `1` to overwrite an existing `%ProgramData%\MiniVault\appsettings.json`. Empty (the default) keeps it — see "On upgrade" below. |
+| `MV_SQL_SERVER`, `MV_SQL_DATABASE`, `MV_SQL_AUTH`, `MV_SQL_USER`, `MV_SQL_PASSWORD`, `MV_SQL_ENCRYPT`, `MV_SQL_TRUSTCERT` | *(empty)*, `MiniVault`, `windows`, *(empty)*, *(empty)*, `1`, *(empty)* | Alternative to `MV_CONNECTIONSTRING`: the parts the SQL page asks for. When `MV_SQL_SERVER` is set the installer composes `ConnectionStrings:MiniVault` from them (`MV_SQL_AUTH` = `windows` for Integrated Security, `sql` with `MV_SQL_USER` / `MV_SQL_PASSWORD`); when it is empty, `MV_CONNECTIONSTRING` is used as given. |
 
 None of `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` or `MV_SERVICEACCOUNT_PASSWORD` may
 contain a double quote (`"`). The installer hands them to its deferred actions as a
@@ -96,9 +97,14 @@ properties (`MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY`, `MV_SERVI
 alike, because all four travel through the same `NAME="value"` list.
 
 **Interactive install**: on a first install the wizard asks for the same values on four pages —
-SQL Server connection (with a *Test connection* button), service account and optional master-key
+SQL Server connection laid out like SSMS's connect dialog (server name, database, Windows or SQL
+Server authentication with login and password, encryption and trust-certificate check boxes, a
+*Test connection* button, and an "enter the connection string directly" mode for anything unusual),
+service account (Local System, Network Service or a named account) and optional master-key
 password, HTTPS certificate (store thumbprint or PFX file) and listen URL, recovery mode (single key
-or Shamir shares) with an acknowledgement that the recovery file will be copied and deleted. Each
+or Shamir shares) with an acknowledgement that the recovery file will be copied and deleted. With
+Windows authentication the test runs as the person installing, while the service later connects as
+the chosen service account — that account still needs its own SQL login. Each
 page validates on *Next* with the rules `WriteMachineConfig` and `RunInit` apply. The recovery
 material is still written to a file, not shown on screen (see below), and the finish page says so.
 On an upgrade the pages are skipped. The MSI builds from the command line and its dialog tables have

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.IO;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -407,9 +408,20 @@ namespace Karmasis.MiniVault.CustomActions.Tests
 
         // The next two need SQL Server LocalDB, like the server's integration tests. The test user is
         // sysadmin on its own LocalDB instance, so a missing database is the "init will create it" case.
+        // The action connects with a 5 second timeout - fine against a running server, too short for a
+        // cold LocalDB instance that first has to start - so the tests start the instance up front.
+        private static void WarmUpLocalDb()
+        {
+            using (var connection = new SqlConnection("Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;Connect Timeout=90"))
+            {
+                connection.Open();
+            }
+        }
+
         [Fact]
         public void TestSqlConnection_WhenTheDatabaseDoesNotExistYet_PassesWithANote()
         {
+            WarmUpLocalDb();
             var session = new FakeMsiSession();
             session.SetProperty("MV_CONNECTIONSTRING",
                 "Server=(localdb)\\MSSQLLocalDB;Database=MiniVaultSetupTest_DoesNotExist_" + Guid.NewGuid().ToString("N") + ";Integrated Security=true");
@@ -424,6 +436,7 @@ namespace Karmasis.MiniVault.CustomActions.Tests
         [Fact]
         public void TestSqlConnection_WhenTheDatabaseExists_PassesWithoutANote()
         {
+            WarmUpLocalDb();
             var session = new FakeMsiSession();
             session.SetProperty("MV_CONNECTIONSTRING", "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true");
 
@@ -432,6 +445,79 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             session.GetProperty(InstallActions.SqlOkProperty).ShouldBe("1");
             session.GetProperty(InstallActions.SqlErrorProperty).ShouldBeEmpty();
             session.GetProperty(InstallActions.SqlNoteProperty).ShouldBeEmpty();
+            session.GetProperty(InstallActions.SqlResultProperty).ShouldBe("Connection succeeded.");
+        }
+
+        // -------------------------------------------------------------------
+        // BuildConnectionString
+        // -------------------------------------------------------------------
+
+        [Fact]
+        public void BuildConnectionString_WindowsAuthentication_ComposesAnIntegratedSecurityString()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.SqlServerProperty, " sql01\\INST,1433 ");
+            session.SetProperty(InstallActions.SqlDatabaseProperty, "MiniVaultProd");
+            session.SetProperty(InstallActions.SqlAuthProperty, "windows");
+            session.SetProperty(InstallActions.SqlEncryptProperty, "1");
+
+            InstallActions.BuildConnectionString(session).ShouldBe((int)ActionResult.Success);
+
+            var built = new SqlConnectionStringBuilder(session.GetProperty(InstallActions.ConnectionStringProperty));
+            built.DataSource.ShouldBe("sql01\\INST,1433");
+            built.InitialCatalog.ShouldBe("MiniVaultProd");
+            built.IntegratedSecurity.ShouldBeTrue();
+            built.Encrypt.ShouldBeTrue();
+            built.TrustServerCertificate.ShouldBeFalse();
+            built.UserID.ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void BuildConnectionString_SqlAuthentication_UsesLoginAndPasswordAndDefaultsTheDatabase()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.SqlServerProperty, "192.168.1.45");
+            session.SetProperty(InstallActions.SqlAuthProperty, "sql");
+            session.SetProperty(InstallActions.SqlUserProperty, "minivault_setup");
+            session.SetProperty(InstallActions.SqlPasswordProperty, "p@ss;w0rd");
+            session.SetProperty(InstallActions.SqlTrustCertProperty, "1");
+
+            InstallActions.BuildConnectionString(session).ShouldBe((int)ActionResult.Success);
+
+            var built = new SqlConnectionStringBuilder(session.GetProperty(InstallActions.ConnectionStringProperty));
+            built.DataSource.ShouldBe("192.168.1.45");
+            built.InitialCatalog.ShouldBe(InstallActions.DefaultDatabaseName);
+            built.IntegratedSecurity.ShouldBeFalse();
+            built.UserID.ShouldBe("minivault_setup");
+            built.Password.ShouldBe("p@ss;w0rd");
+            built.Encrypt.ShouldBeFalse();
+            built.TrustServerCertificate.ShouldBeTrue();
+            // The builder quotes the ';' with single quotes, so ValidateProperties' double-quote rule still holds.
+            session.GetProperty(InstallActions.ConnectionStringProperty).ShouldNotContain("\"");
+        }
+
+        [Fact]
+        public void BuildConnectionString_WhenTheAdvancedBoxIsTicked_LeavesTheTypedStringAlone()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.SqlAdvancedProperty, "1");
+            session.SetProperty(InstallActions.SqlServerProperty, "ignored");
+            session.SetProperty(InstallActions.ConnectionStringProperty, "Server=typed;Database=X;Integrated Security=true");
+
+            InstallActions.BuildConnectionString(session).ShouldBe((int)ActionResult.Success);
+
+            session.GetProperty(InstallActions.ConnectionStringProperty).ShouldBe("Server=typed;Database=X;Integrated Security=true");
+        }
+
+        [Fact]
+        public void BuildConnectionString_WithoutAServer_LeavesASilentInstallsConnectionStringAlone()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.ConnectionStringProperty, "Server=passed-on-the-command-line;Database=MiniVault;Integrated Security=true");
+
+            InstallActions.BuildConnectionString(session).ShouldBe((int)ActionResult.Success);
+
+            session.GetProperty(InstallActions.ConnectionStringProperty).ShouldBe("Server=passed-on-the-command-line;Database=MiniVault;Integrated Security=true");
         }
 
         // -------------------------------------------------------------------
