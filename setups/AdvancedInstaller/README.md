@@ -179,6 +179,11 @@ written to the MSI verbose log.
 | `MV_RECONFIGURE` | *(empty)* | `1` to overwrite an existing `%ProgramData%\MiniVault\appsettings.json`. Empty (the default) keeps it, so an upgrade never clobbers a working configuration. |
 | `MV_SQL_OK` / `MV_SQL_ERROR` | `0` / *(empty)* | Output of `TestSqlConnection`. |
 
+Only the properties with a default have a row in the Property table: `Value` is a required column and
+Advanced Installer refuses to open a project with an empty one ("Required column [Property.Value] has
+empty value"). A property without a row reads as empty, which is exactly the "(empty)" default above;
+`verify-aip.ps1` fails on an empty-`Value` row.
+
 `MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY` and `MV_SERVICEACCOUNT_PASSWORD` are listed
 in `MsiHiddenProperties`, and so are `WriteMachineConfig` and `RunInit` — a deferred action reads its
 input from a property named after the action, and MSI logs that property like any other, so hiding

@@ -43,30 +43,24 @@
          because a deferred action's CustomActionData is logged under a property with the same name
          as the action, and that data carries the connection string, the certificate password and
          the master-key password. Hiding only the MV_* properties would leave all three in a /l*v
-         log. -->
-    <ROW Property="MV_CONNECTIONSTRING" Value=""/>
+         log.
+         Only the properties WITH a default have a row here: the Property table's Value column is
+         required and may not be empty (Advanced Installer refuses to open the project otherwise -
+         "Required column [Property.Value] has empty value"), and a property with no row simply reads
+         as empty. So MV_CONNECTIONSTRING, MV_SERVICEACCOUNT_PASSWORD, MV_MASTERKEY, MV_CERT_PATH,
+         MV_CERT_PASSWORD, MV_CERT_THUMBPRINT, MV_RECONFIGURE and MV_SQL_ERROR exist only through
+         SecureCustomProperties / MsiHiddenProperties, the dialogs and the custom actions.
+         UI-only properties (never read by a custom action) have no row either: the check boxes
+         MV_MASTERKEY_USEPASSWORD, MV_CERT_USEPFX and MV_RECOVERY_ACK hold "1" when ticked and are
+         removed when unticked (MsiCheckBoxComponent); MV_MASTERKEY_CONFIRM repeats the master-key
+         password and is hidden like MV_MASTERKEY; MV_UI_ERROR carries the message MvErrorDlg shows
+         when a page's Next button rejects the input. -->
     <ROW Property="MV_SERVICEACCOUNT" Value="LocalSystem"/>
-    <ROW Property="MV_SERVICEACCOUNT_PASSWORD" Value=""/>
     <ROW Property="MV_RECOVERY" Value="single"/>
     <ROW Property="MV_SHARES" Value="3"/>
     <ROW Property="MV_THRESHOLD" Value="2"/>
-    <ROW Property="MV_MASTERKEY" Value=""/>
-    <ROW Property="MV_CERT_PATH" Value=""/>
-    <ROW Property="MV_CERT_PASSWORD" Value=""/>
-    <ROW Property="MV_CERT_THUMBPRINT" Value=""/>
     <ROW Property="MV_URL" Value="https://0.0.0.0:8200"/>
-    <ROW Property="MV_RECONFIGURE" Value=""/>
     <ROW Property="MV_SQL_OK" Value="0"/>
-    <ROW Property="MV_SQL_ERROR" Value=""/>
-    <!-- UI-only properties: read by the configuration dialogs, never by a custom action. The check
-         boxes hold "1" when ticked and are cleared (removed) when unticked - see MsiCheckBoxComponent.
-         MV_MASTERKEY_CONFIRM repeats the master-key password, so it is hidden like MV_MASTERKEY;
-         MV_UI_ERROR carries the message MvErrorDlg shows when a page's Next button rejects the input. -->
-    <ROW Property="MV_MASTERKEY_USEPASSWORD" Value=""/>
-    <ROW Property="MV_MASTERKEY_CONFIRM" Value=""/>
-    <ROW Property="MV_CERT_USEPFX" Value=""/>
-    <ROW Property="MV_RECOVERY_ACK" Value=""/>
-    <ROW Property="MV_UI_ERROR" Value=""/>
     <ROW Property="MsiHiddenProperties" Value="MV_CONNECTIONSTRING;MV_CERT_PASSWORD;MV_MASTERKEY;MV_MASTERKEY_CONFIRM;MV_SERVICEACCOUNT_PASSWORD;WriteMachineConfig;RunInit"/>
     <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND;MV_CONNECTIONSTRING;MV_SERVICEACCOUNT;MV_SERVICEACCOUNT_PASSWORD;MV_RECOVERY;MV_SHARES;MV_THRESHOLD;MV_MASTERKEY;MV_CERT_PATH;MV_CERT_PASSWORD;MV_CERT_THUMBPRINT;MV_URL;MV_RECONFIGURE;MV_SQL_OK;MV_SQL_ERROR"/>
   </COMPONENT>

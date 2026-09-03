@@ -384,6 +384,34 @@ $properties = @{}
 foreach ($row in @($components['caphyon.advinst.msicomp.MsiPropsComponent'].ROW)) {
     $value = if ($row.PSObject.Properties.Name -contains 'Value') { $row.Value } else { '' }
     $properties[$row.Property] = $value
+    # Property.Value is a required column: Advanced Installer refuses to open a project with an empty
+    # one ("Required column [Property.Value] has empty value"). A property without a default must
+    # have no row at all - an undefined property reads as empty anyway.
+    if ([string]::IsNullOrEmpty($value)) {
+        Write-Fail "Property row '$($row.Property)' has an empty Value; drop the row (an undefined property reads as empty)"
+    }
+}
+
+# A property is "known" when it has a Property row, or exists without a default: listed in
+# SecureCustomProperties / MsiHiddenProperties, bound through the CheckBox table, or set by a
+# control event ([NAME] event). Anything a dialog binds or an action reads must be in this set,
+# so a typo in a property name still fails here.
+$knownProperties = @{}
+foreach ($name in $properties.Keys) { $knownProperties[$name] = $true }
+foreach ($listProperty in @('SecureCustomProperties', 'MsiHiddenProperties')) {
+    if ($properties.ContainsKey($listProperty)) {
+        foreach ($name in @($properties[$listProperty] -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+            $knownProperties[$name] = $true
+        }
+    }
+}
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiCheckBoxComponent')) {
+    foreach ($row in @($components['caphyon.advinst.msicomp.MsiCheckBoxComponent'].ROW)) { $knownProperties[$row.Property] = $true }
+}
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiControlEventComponent')) {
+    foreach ($row in @($components['caphyon.advinst.msicomp.MsiControlEventComponent'].ROW)) {
+        if ($row.Event -match '^\[(.+)\]$') { $knownProperties[$Matches[1]] = $true }
+    }
 }
 
 $hiddenProperties = @()
@@ -397,7 +425,7 @@ if ($hiddenProperties.Count -eq 0) {
 
 # The secrets an operator types on the msiexec command line or into a dialog.
 foreach ($secret in @('MV_CONNECTIONSTRING', 'MV_CERT_PASSWORD', 'MV_MASTERKEY', 'MV_SERVICEACCOUNT_PASSWORD')) {
-    if (-not $properties.ContainsKey($secret)) {
+    if (-not $knownProperties.ContainsKey($secret)) {
         Write-Fail "property not declared: $secret"
     } elseif ($hiddenProperties -contains $secret) {
         Write-Ok "hidden from the MSI log: $secret"
@@ -408,7 +436,7 @@ foreach ($secret in @('MV_CONNECTIONSTRING', 'MV_CERT_PASSWORD', 'MV_MASTERKEY',
 
 # Properties the custom actions read but that carry no secret.
 foreach ($property in @('MV_RECONFIGURE', 'MV_SERVICEACCOUNT')) {
-    if ($properties.ContainsKey($property)) {
+    if ($knownProperties.ContainsKey($property)) {
         Write-Ok "property declared: $property"
     } else {
         Write-Fail "property not declared: $property"
@@ -507,8 +535,8 @@ foreach ($row in $controlRows) {
 
     $bound = if ($row.PSObject.Properties.Name -contains 'Property') { $row.Property } else { '' }
     if ($bound) {
-        if (-not $properties.ContainsKey($bound)) {
-            Write-Fail "control $key binds undeclared property $bound"
+        if (-not $knownProperties.ContainsKey($bound)) {
+            Write-Fail "control $key binds unknown property $bound (no Property row, not in SecureCustomProperties/MsiHiddenProperties, no CheckBox row, never set by an event)"
         }
         if ($row.Type -eq 'CheckBox' -and @($checkBoxRows | Where-Object { $_.Property -eq $bound }).Count -ne 1) {
             Write-Fail "check box $key has no CheckBox-table row for $bound (its ticked value would be undefined)"
@@ -537,8 +565,8 @@ foreach ($row in $eventRows) {
         default {
             if ($row.Event -match '^\[(.+)\]$') {
                 $target = $Matches[1]
-                if ($target -ne 'AiRefreshDlg' -and -not $properties.ContainsKey($target)) {
-                    Write-Fail "$key sets undeclared property $target"
+                if ($target -ne 'AiRefreshDlg' -and -not $knownProperties.ContainsKey($target)) {
+                    Write-Fail "$key sets unknown property $target"
                 }
             }
         }
