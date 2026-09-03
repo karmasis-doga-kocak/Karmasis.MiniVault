@@ -973,7 +973,7 @@
     <ROW Dialog_="SqlDlg" Control="LoginEdit" Type="Edit" X="135" Y="115" Width="225" Height="16" Attributes="3" Property="MV_SQL_USER" Text="{128}" Order="1200"/>
     <ROW Dialog_="SqlDlg" Control="PasswordLabel" Type="Text" X="24" Y="137" Width="108" Height="10" Attributes="3" Text="&amp;Password:" Order="1300"/>
     <ROW Dialog_="SqlDlg" Control="PasswordEdit" Type="Edit" X="135" Y="135" Width="225" Height="16" Attributes="2097155" Property="MV_SQL_PASSWORD" Text="{256}" Order="1400"/>
-    <ROW Dialog_="SqlDlg" Control="LoginNote" Type="Text" X="135" Y="153" Width="225" Height="10" Attributes="131075" Text="Login and password apply to SQL Server Authentication only." Order="1450"/>
+    <ROW Dialog_="SqlDlg" Control="LoginNote" Type="Text" X="135" Y="153" Width="225" Height="10" Attributes="131075" Text="Not used with Windows Authentication." Order="1450"/>
     <ROW Dialog_="SqlDlg" Control="EncryptCheck" Type="CheckBox" X="135" Y="165" Width="110" Height="12" Attributes="3" Property="MV_SQL_ENCRYPT" Text="&amp;Encrypt connection" Order="1500"/>
     <ROW Dialog_="SqlDlg" Control="TrustCheck" Type="CheckBox" X="250" Y="165" Width="110" Height="12" Attributes="3" Property="MV_SQL_TRUSTCERT" Text="&amp;Trust server certificate" Order="1600"/>
     <ROW Dialog_="SqlDlg" Control="AdvancedCheck" Type="CheckBox" X="12" Y="181" Width="255" Height="12" Attributes="3" Property="MV_SQL_ADVANCED" Text="Enter the &amp;connection string directly (advanced)" Order="1700"/>
@@ -1037,10 +1037,16 @@
     <ROW Dialog_="SqlDlg" Control_="DatabaseEdit" Action="Disable" Condition="MV_SQL_ADVANCED = &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="AuthCombo" Action="Enable" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="AuthCombo" Action="Disable" Condition="MV_SQL_ADVANCED = &quot;1&quot;"/>
-    <ROW Dialog_="SqlDlg" Control_="LoginEdit" Action="Enable" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
-    <ROW Dialog_="SqlDlg" Control_="LoginEdit" Action="Disable" Condition="MV_SQL_ADVANCED = &quot;1&quot;"/>
-    <ROW Dialog_="SqlDlg" Control_="PasswordEdit" Action="Enable" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
-    <ROW Dialog_="SqlDlg" Control_="PasswordEdit" Action="Disable" Condition="MV_SQL_ADVANCED = &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="LoginEdit" Action="Enable" Condition="MV_SQL_AUTH = &quot;sql&quot; AND MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="LoginEdit" Action="Disable" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot; OR MV_SQL_ADVANCED = &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="PasswordEdit" Action="Enable" Condition="MV_SQL_AUTH = &quot;sql&quot; AND MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="PasswordEdit" Action="Disable" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot; OR MV_SQL_ADVANCED = &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="LoginNote" Action="Show" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="LoginNote" Action="Hide" Condition="MV_SQL_AUTH = &quot;sql&quot;"/>
+    <ROW Dialog_="ServiceDlg" Control_="AccountEdit" Action="Enable" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot;"/>
+    <ROW Dialog_="ServiceDlg" Control_="AccountEdit" Action="Disable" Condition="MV_SERVICEACCOUNT_KIND &lt;&gt; &quot;Custom&quot;"/>
+    <ROW Dialog_="ServiceDlg" Control_="AccountPasswordEdit" Action="Enable" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot;"/>
+    <ROW Dialog_="ServiceDlg" Control_="AccountPasswordEdit" Action="Disable" Condition="MV_SERVICEACCOUNT_KIND &lt;&gt; &quot;Custom&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Action="Enable" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Action="Disable" Condition="MV_SQL_ADVANCED = &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="TrustCheck" Action="Enable" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>

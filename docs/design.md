@@ -587,7 +587,9 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
   listesi (Windows / SQL Server; `ComboBox` tablosu), login/şifre, encrypt ve trust checkbox'ları,
   "connection string'i doğrudan gir" modu. Önce RadioButtonGroup denendi; şifre alanına ilk tuşta
   radio butonları kayboluyordu (mouse-over ile geri geliyordu; opak metin ve çerçeveli grup
-  düzeltmedi). ComboBox event yayınlayamadığından login/şifre alanları hep açık, not sabit. Yeni immediate custom action
+  düzeltmedi). ComboBox event yayınlayamaz, ama Windows Installer bir kontrol property değiştirdiğinde
+  sayfanın `ControlCondition` satırlarını yeniden değerlendirir; login/şifre (ve servis sayfasında hesap
+  alanları) seçime göre Enable/Disable koşuluyla açılıp kapanır, yenileme gerekmez. Not sabit. Yeni immediate custom action
   `BuildConnectionString` parçalardan `MV_CONNECTIONSTRING`'i tek tırnak kuralıyla üretir (çift tırnak
   asla üretilmez); `BuildConnectionStringSilent` execute sequence'ta `ValidateProperties`'ten önce
   koşar, böylece silent kurulum parçaları (`MV_SQL_*`) da verebilir. Servis sayfasında hesap seçimi
