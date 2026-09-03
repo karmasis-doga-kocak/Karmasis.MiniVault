@@ -31,6 +31,9 @@
   <ItemGroup>
     <!-- System.Data.SqlClient (TestSqlConnection) ships in System.Data on .NET Framework. -->
     <Reference Include="System.Data" />
+    <!-- MessageBox.Show for ShowUiMessage: the installer's own modal message boxes, parented to the
+         wizard window (the pattern Karmasis.InfraskopeServer's setup uses). -->
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <ItemGroup>

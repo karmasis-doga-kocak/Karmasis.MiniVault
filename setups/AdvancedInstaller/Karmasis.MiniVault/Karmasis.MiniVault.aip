@@ -1004,19 +1004,6 @@
     <ROW Dialog_="ServiceDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="1900" TextLocId="-" Options="1"/>
     <ROW Dialog_="ServiceDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="2000" TextLocId="-" Options="1"/>
     <ROW Dialog_="ServiceDlg" Control="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Cancel]" Order="2100" TextLocId="-" Options="1"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control="OK" Type="PushButton" X="132" Y="95" Width="56" Height="17" Attributes="3" Text="[ButtonText_OK]" Order="100" TextLocId="-"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control="Message" Type="Text" X="50" Y="15" Width="255" Height="72" Attributes="131075" Text="[MV_UI_ERROR]" Order="200"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control="IconInfo" Type="Icon" X="15" Y="15" Width="24" Height="24" Attributes="5242881" Text="[InfoIcon]" Order="300"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control="IconWarn" Type="Icon" X="15" Y="15" Width="24" Height="24" Attributes="5242881" Text="[ExclamationIcon]" Order="400"/>
-    <ROW Dialog_="MvServiceMsgDlg" Control="OK" Type="PushButton" X="132" Y="95" Width="56" Height="17" Attributes="3" Text="[ButtonText_OK]" Order="100" TextLocId="-"/>
-    <ROW Dialog_="MvServiceMsgDlg" Control="Message" Type="Text" X="50" Y="15" Width="255" Height="72" Attributes="131075" Text="[MV_UI_ERROR]" Order="200"/>
-    <ROW Dialog_="MvServiceMsgDlg" Control="IconWarn" Type="Icon" X="15" Y="15" Width="24" Height="24" Attributes="5242881" Text="[ExclamationIcon]" Order="300"/>
-    <ROW Dialog_="MvTlsMsgDlg" Control="OK" Type="PushButton" X="132" Y="95" Width="56" Height="17" Attributes="3" Text="[ButtonText_OK]" Order="100" TextLocId="-"/>
-    <ROW Dialog_="MvTlsMsgDlg" Control="Message" Type="Text" X="50" Y="15" Width="255" Height="72" Attributes="131075" Text="[MV_UI_ERROR]" Order="200"/>
-    <ROW Dialog_="MvTlsMsgDlg" Control="IconWarn" Type="Icon" X="15" Y="15" Width="24" Height="24" Attributes="5242881" Text="[ExclamationIcon]" Order="300"/>
-    <ROW Dialog_="MvRecoveryMsgDlg" Control="OK" Type="PushButton" X="132" Y="95" Width="56" Height="17" Attributes="3" Text="[ButtonText_OK]" Order="100" TextLocId="-"/>
-    <ROW Dialog_="MvRecoveryMsgDlg" Control="Message" Type="Text" X="50" Y="15" Width="255" Height="72" Attributes="131075" Text="[MV_UI_ERROR]" Order="200"/>
-    <ROW Dialog_="MvRecoveryMsgDlg" Control="IconWarn" Type="Icon" X="15" Y="15" Width="24" Height="24" Attributes="5242881" Text="[ExclamationIcon]" Order="300"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiControlConditionComponent">
     <ROW Dialog_="TlsDlg" Control_="ThumbprintEdit" Action="Enable" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;"/>
@@ -1069,10 +1056,6 @@
     <ROW Dialog_="ServiceDlg" Control_="MasterKeyEdit" Action="Disable" Condition="MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot;"/>
     <ROW Dialog_="ServiceDlg" Control_="MasterKeyConfirmEdit" Action="Enable" Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot;"/>
     <ROW Dialog_="ServiceDlg" Control_="MasterKeyConfirmEdit" Action="Disable" Condition="MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot;"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control_="IconInfo" Action="Show" Condition="MV_UI_KIND = &quot;info&quot;"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control_="IconInfo" Action="Hide" Condition="MV_UI_KIND &lt;&gt; &quot;info&quot;"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control_="IconWarn" Action="Show" Condition="MV_UI_KIND &lt;&gt; &quot;info&quot;"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control_="IconWarn" Action="Hide" Condition="MV_UI_KIND = &quot;info&quot;"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiControlEventComponent">
     <ROW Dialog_="FolderDlg" Control_="Next" Event="NewDialog" Argument="SqlDlg" Condition="AI_INSTALL AND NOT OLDPRODUCTS" Ordering="202"/>
@@ -1104,88 +1087,101 @@
     <ROW Dialog_="TlsDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="TlsDlg" Control_="Back" Event="NewDialog" Argument="ServiceDlg" Condition="AI_INSTALL" Ordering="1"/>
     <ROW Dialog_="TlsDlg" Control_="UsePfxCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_THUMBPRINT]" Argument="{}" Condition="MV_CERT_USEPFX = &quot;1&quot;" Ordering="1"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_PATH]" Argument="{}" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;" Ordering="2"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_PASSWORD]" Argument="{}" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;" Ordering="3"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="The listen URL is required (for example https://0.0.0.0:8200)." Condition="MV_URL = &quot;&quot;" Ordering="4"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="NewDialog" Argument="MvTlsMsgDlg" Condition="MV_URL = &quot;&quot;" Ordering="5"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the certificate thumbprint, or tick the PFX option and enter a PFX file path." Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT = &quot;&quot;" Ordering="6"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="NewDialog" Argument="MvTlsMsgDlg" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT = &quot;&quot;" Ordering="7"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the PFX file path." Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH = &quot;&quot;" Ordering="8"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="NewDialog" Argument="MvTlsMsgDlg" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH = &quot;&quot;" Ordering="9"/>
-    <ROW Dialog_="TlsDlg" Control_="Next" Event="NewDialog" Argument="RecoveryDlg" Condition="MV_URL &lt;&gt; &quot;&quot; AND ((MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT &lt;&gt; &quot;&quot;) OR (MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH &lt;&gt; &quot;&quot;))" Ordering="10"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_THUMBPRINT]" Argument="{}" Condition="MV_CERT_USEPFX = &quot;1&quot;" Ordering="10"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_PATH]" Argument="{}" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;" Ordering="20"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_PASSWORD]" Argument="{}" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;" Ordering="30"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="The listen URL is required (for example https://0.0.0.0:8200)." Condition="MV_URL = &quot;&quot;" Ordering="40"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_URL = &quot;&quot;" Ordering="50"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_URL = &quot;&quot;" Ordering="53"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_URL = &quot;&quot;" Ordering="56"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the certificate thumbprint, or tick the PFX option and enter a PFX file path." Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT = &quot;&quot;" Ordering="60"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT = &quot;&quot;" Ordering="70"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT = &quot;&quot;" Ordering="73"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT = &quot;&quot;" Ordering="76"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the PFX file path." Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH = &quot;&quot;" Ordering="80"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH = &quot;&quot;" Ordering="90"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH = &quot;&quot;" Ordering="93"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_URL &lt;&gt; &quot;&quot; AND MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH = &quot;&quot;" Ordering="96"/>
+    <ROW Dialog_="TlsDlg" Control_="Next" Event="NewDialog" Argument="RecoveryDlg" Condition="MV_URL &lt;&gt; &quot;&quot; AND ((MV_CERT_USEPFX &lt;&gt; &quot;1&quot; AND MV_CERT_THUMBPRINT &lt;&gt; &quot;&quot;) OR (MV_CERT_USEPFX = &quot;1&quot; AND MV_CERT_PATH &lt;&gt; &quot;&quot;))" Ordering="100"/>
     <ROW Dialog_="RecoveryDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="RecoveryDlg" Control_="Back" Event="NewDialog" Argument="TlsDlg" Condition="AI_INSTALL" Ordering="1"/>
     <ROW Dialog_="RecoveryDlg" Control_="ShamirCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Shamir shares must be between 2 and 255, and the number needed to recover between 2 and the number of shares." Condition="MV_RECOVERY = &quot;shamir&quot; AND (MV_SHARES = &quot;&quot; OR MV_THRESHOLD = &quot;&quot; OR MV_SHARES &lt; 2 OR MV_SHARES &gt; 255 OR MV_THRESHOLD &lt; 2 OR MV_THRESHOLD &gt; 255)" Ordering="1"/>
-    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="NewDialog" Argument="MvRecoveryMsgDlg" Condition="MV_RECOVERY = &quot;shamir&quot; AND (MV_SHARES = &quot;&quot; OR MV_THRESHOLD = &quot;&quot; OR MV_SHARES &lt; 2 OR MV_SHARES &gt; 255 OR MV_THRESHOLD &lt; 2 OR MV_THRESHOLD &gt; 255)" Ordering="2"/>
-    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Confirm that you will copy the recovery file to a safe offline location and delete it after installation." Condition="MV_RECOVERY_ACK &lt;&gt; &quot;1&quot;" Ordering="3"/>
-    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="NewDialog" Argument="MvRecoveryMsgDlg" Condition="MV_RECOVERY_ACK &lt;&gt; &quot;1&quot;" Ordering="4"/>
-    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="NewDialog" Argument="VerifyReadyDlg" Condition="MV_RECOVERY_ACK = &quot;1&quot; AND (MV_RECOVERY &lt;&gt; &quot;shamir&quot; OR (MV_SHARES &gt;= 2 AND MV_SHARES &lt;= 255 AND MV_THRESHOLD &gt;= 2 AND MV_THRESHOLD &lt;= 255))" Ordering="10"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Shamir shares must be between 2 and 255, and the number needed to recover between 2 and the number of shares." Condition="MV_RECOVERY = &quot;shamir&quot; AND (MV_SHARES = &quot;&quot; OR MV_THRESHOLD = &quot;&quot; OR MV_SHARES &lt; 2 OR MV_SHARES &gt; 255 OR MV_THRESHOLD &lt; 2 OR MV_THRESHOLD &gt; 255)" Ordering="10"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_RECOVERY = &quot;shamir&quot; AND (MV_SHARES = &quot;&quot; OR MV_THRESHOLD = &quot;&quot; OR MV_SHARES &lt; 2 OR MV_SHARES &gt; 255 OR MV_THRESHOLD &lt; 2 OR MV_THRESHOLD &gt; 255)" Ordering="20"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_RECOVERY = &quot;shamir&quot; AND (MV_SHARES = &quot;&quot; OR MV_THRESHOLD = &quot;&quot; OR MV_SHARES &lt; 2 OR MV_SHARES &gt; 255 OR MV_THRESHOLD &lt; 2 OR MV_THRESHOLD &gt; 255)" Ordering="23"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_RECOVERY = &quot;shamir&quot; AND (MV_SHARES = &quot;&quot; OR MV_THRESHOLD = &quot;&quot; OR MV_SHARES &lt; 2 OR MV_SHARES &gt; 255 OR MV_THRESHOLD &lt; 2 OR MV_THRESHOLD &gt; 255)" Ordering="26"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Confirm that you will copy the recovery file to a safe offline location and delete it after installation." Condition="MV_RECOVERY_ACK &lt;&gt; &quot;1&quot;" Ordering="30"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_RECOVERY_ACK &lt;&gt; &quot;1&quot;" Ordering="40"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_RECOVERY_ACK &lt;&gt; &quot;1&quot;" Ordering="43"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_RECOVERY_ACK &lt;&gt; &quot;1&quot;" Ordering="46"/>
+    <ROW Dialog_="RecoveryDlg" Control_="Next" Event="NewDialog" Argument="VerifyReadyDlg" Condition="MV_RECOVERY_ACK = &quot;1&quot; AND (MV_RECOVERY &lt;&gt; &quot;shamir&quot; OR (MV_SHARES &gt;= 2 AND MV_SHARES &lt;= 255 AND MV_THRESHOLD &gt;= 2 AND MV_THRESHOLD &lt;= 255))" Ordering="100"/>
     <ROW Dialog_="SqlDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="SqlDlg" Control_="Back" Event="NewDialog" Argument="FolderDlg" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_UI_ERROR]" Argument="Windows Authentication is recommended: the service then connects with its own Windows account and no password is stored. With SQL Server Authentication the login and password are written to %ProgramData%\MiniVault\appsettings.json in plain text (protected only by the folder's ACL)." Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="6"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="NewDialog" Argument="MvSqlMsgDlg" Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="7"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[AiRefreshDlg]" Argument="1" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot;" Ordering="8"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_CONNECTIONSTRING]" Argument="{}" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="AI_DATA_SETTER_2" Condition="AI_INSTALL" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="TestSqlConnection" Condition="AI_INSTALL" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_UI_ERROR]" Argument="[MV_SQL_RESULT]" Condition="AI_INSTALL" Ordering="6"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_UI_KIND]" Argument="info" Condition="MV_SQL_OK = &quot;1&quot;" Ordering="7"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="8"/>
-    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="NewDialog" Argument="MvSqlMsgDlg" Condition="AI_INSTALL" Ordering="9"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_CONNECTIONSTRING]" Argument="{}" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_2" Condition="AI_INSTALL" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="TestSqlConnection" Condition="AI_INSTALL" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="[MV_SQL_RESULT]" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="6"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="7"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="NewDialog" Argument="MvSqlMsgDlg" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="8"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="NewDialog" Argument="ServiceDlg" Condition="MV_SQL_OK = &quot;1&quot;" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="10"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="30"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="40"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_UI_ERROR]" Argument="Windows Authentication is recommended: the service then connects with its own Windows account and no password is stored. With SQL Server Authentication the login and password are written to %ProgramData%\MiniVault\appsettings.json in plain text (protected only by the folder's ACL)." Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="50"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_UI_ERROR]" Argument="{}" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot;" Ordering="51"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_UI_KIND]" Argument="warn" Condition="AI_INSTALL" Ordering="60"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="70"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="ShowUiMessage" Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="80"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="10"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="30"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="40"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="10"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="30"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="40"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="10"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="30"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="40"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_CONNECTIONSTRING]" Argument="{}" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="10"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="30"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="AI_DATA_SETTER_2" Condition="AI_INSTALL" Ordering="40"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="TestSqlConnection" Condition="AI_INSTALL" Ordering="50"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_UI_ERROR]" Argument="[MV_SQL_RESULT]" Condition="AI_INSTALL" Ordering="60"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_UI_KIND]" Argument="info" Condition="MV_SQL_OK = &quot;1&quot;" Ordering="70"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="71"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="AI_INSTALL" Ordering="80"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="ShowUiMessage" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="100"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_CONNECTIONSTRING]" Argument="{}" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="10"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="30"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_2" Condition="AI_INSTALL" Ordering="40"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="TestSqlConnection" Condition="AI_INSTALL" Ordering="50"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="[MV_SQL_RESULT]" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="60"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="70"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="80"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="90"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="[AiRefreshDlg]" Argument="1" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="100"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="NewDialog" Argument="ServiceDlg" Condition="MV_SQL_OK = &quot;1&quot;" Ordering="200"/>
     <ROW Dialog_="ServiceDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="ServiceDlg" Control_="Back" Event="NewDialog" Argument="SqlDlg" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="ServiceDlg" Control_="KindGroup" Event="[MV_SERVICEACCOUNT]" Argument="{}" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot; AND (MV_SERVICEACCOUNT = &quot;LocalSystem&quot; OR MV_SERVICEACCOUNT = &quot;NT AUTHORITY\NetworkService&quot;)" Ordering="1"/>
-    <ROW Dialog_="ServiceDlg" Control_="KindGroup" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="ServiceDlg" Control_="UsePasswordCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_SERVICEACCOUNT]" Argument="LocalSystem" Condition="MV_SERVICEACCOUNT_KIND = &quot;LocalSystem&quot;" Ordering="1"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_SERVICEACCOUNT]" Argument="NT AUTHORITY\NetworkService" Condition="MV_SERVICEACCOUNT_KIND = &quot;NetworkService&quot;" Ordering="2"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_SERVICEACCOUNT_PASSWORD]" Argument="{}" Condition="MV_SERVICEACCOUNT_KIND &lt;&gt; &quot;Custom&quot;" Ordering="3"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_MASTERKEY]" Argument="{}" Condition="MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot;" Ordering="4"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_MASTERKEY_CONFIRM]" Argument="{}" Condition="MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot;" Ordering="5"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the service account (DOMAIN\user, or DOMAIN\name$ for a gMSA)." Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot; AND MV_SERVICEACCOUNT = &quot;&quot;" Ordering="6"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="NewDialog" Argument="MvServiceMsgDlg" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot; AND MV_SERVICEACCOUNT = &quot;&quot;" Ordering="7"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the master key password, or clear the option to derive the master key from a password." Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot; AND MV_MASTERKEY = &quot;&quot;" Ordering="8"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="NewDialog" Argument="MvServiceMsgDlg" Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot; AND MV_MASTERKEY = &quot;&quot;" Ordering="9"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="The master key passwords do not match." Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot; AND MV_MASTERKEY &lt;&gt; &quot;&quot; AND MV_MASTERKEY &lt;&gt; MV_MASTERKEY_CONFIRM" Ordering="10"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="NewDialog" Argument="MvServiceMsgDlg" Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot; AND MV_MASTERKEY &lt;&gt; &quot;&quot; AND MV_MASTERKEY &lt;&gt; MV_MASTERKEY_CONFIRM" Ordering="11"/>
-    <ROW Dialog_="ServiceDlg" Control_="Next" Event="NewDialog" Argument="TlsDlg" Condition="(MV_SERVICEACCOUNT_KIND &lt;&gt; &quot;Custom&quot; OR MV_SERVICEACCOUNT &lt;&gt; &quot;&quot;) AND (MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot; OR (MV_MASTERKEY &lt;&gt; &quot;&quot; AND MV_MASTERKEY = MV_MASTERKEY_CONFIRM))" Ordering="20"/>
-    <ROW Dialog_="MvSqlMsgDlg" Control_="OK" Event="NewDialog" Argument="SqlDlg" Condition="1" Ordering="1"/>
-    <ROW Dialog_="MvServiceMsgDlg" Control_="OK" Event="NewDialog" Argument="ServiceDlg" Condition="1" Ordering="1"/>
-    <ROW Dialog_="MvTlsMsgDlg" Control_="OK" Event="NewDialog" Argument="TlsDlg" Condition="1" Ordering="1"/>
-    <ROW Dialog_="MvRecoveryMsgDlg" Control_="OK" Event="NewDialog" Argument="RecoveryDlg" Condition="1" Ordering="1"/>
+    <ROW Dialog_="ServiceDlg" Control_="KindGroup" Event="[MV_SERVICEACCOUNT]" Argument="{}" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot; AND (MV_SERVICEACCOUNT = &quot;LocalSystem&quot; OR MV_SERVICEACCOUNT = &quot;NT AUTHORITY\NetworkService&quot;)" Ordering="10"/>
+    <ROW Dialog_="ServiceDlg" Control_="KindGroup" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="ServiceDlg" Control_="UsePasswordCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="90"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_SERVICEACCOUNT]" Argument="LocalSystem" Condition="MV_SERVICEACCOUNT_KIND = &quot;LocalSystem&quot;" Ordering="10"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_SERVICEACCOUNT]" Argument="NT AUTHORITY\NetworkService" Condition="MV_SERVICEACCOUNT_KIND = &quot;NetworkService&quot;" Ordering="20"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_SERVICEACCOUNT_PASSWORD]" Argument="{}" Condition="MV_SERVICEACCOUNT_KIND &lt;&gt; &quot;Custom&quot;" Ordering="30"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_MASTERKEY]" Argument="{}" Condition="MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot;" Ordering="40"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_MASTERKEY_CONFIRM]" Argument="{}" Condition="MV_MASTERKEY_USEPASSWORD &lt;&gt; &quot;1&quot;" Ordering="50"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="{}" Condition="AI_INSTALL" Ordering="60"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_KIND]" Argument="warn" Condition="AI_INSTALL" Ordering="61"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the service account (DOMAIN\user, or DOMAIN\name$ for a gMSA)." Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot; AND MV_SERVICEACCOUNT = &quot;&quot;" Ordering="70"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the master key password, or clear the option to derive the master key from a password." Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot; AND MV_MASTERKEY = &quot;&quot;" Ordering="80"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="The master key passwords do not match." Condition="MV_MASTERKEY_USEPASSWORD = &quot;1&quot; AND MV_MASTERKEY &lt;&gt; &quot;&quot; AND MV_MASTERKEY &lt;&gt; MV_MASTERKEY_CONFIRM" Ordering="90"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_7" Condition="MV_UI_ERROR &lt;&gt; &quot;&quot;" Ordering="100"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="DoAction" Argument="ShowUiMessage" Condition="MV_UI_ERROR &lt;&gt; &quot;&quot;" Ordering="110"/>
+    <ROW Dialog_="ServiceDlg" Control_="Next" Event="NewDialog" Argument="TlsDlg" Condition="MV_UI_ERROR = &quot;&quot;" Ordering="200"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiCreateFolderComponent">
     <ROW Directory_="APPDIR" Component_="APPDIR" ManualDelete="true"/>
@@ -1200,6 +1196,8 @@
     <ROW Action="AI_DATA_SETTER_4" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.ValidateProperties"/>
     <ROW Action="AI_DATA_SETTER_5" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.BuildConnectionString"/>
     <ROW Action="AI_DATA_SETTER_6" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.BuildConnectionString"/>
+    <ROW Action="AI_DATA_SETTER_7" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.ShowUiMessage"/>
+    <ROW Action="ShowUiMessage" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" WithoutSeq="true" AdditionalSeq="AI_DATA_SETTER_7"/>
     <ROW Action="BuildConnectionString" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" WithoutSeq="true" AdditionalSeq="AI_DATA_SETTER_5"/>
     <ROW Action="BuildConnectionStringSilent" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_6"/>
     <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>
@@ -1230,10 +1228,6 @@
   <COMPONENT cid="caphyon.advinst.msicomp.MsiDialogComponent">
     <ROW Dialog="RecoveryDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_Default="Next" Control_Cancel="Cancel"/>
     <ROW Dialog="TlsDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_Default="Next" Control_Cancel="Cancel"/>
-    <ROW Dialog="MvSqlMsgDlg" HCentering="50" VCentering="50" Width="320" Height="120" Attributes="3" Title="[ProductName] [Setup]" Control_First="OK" Control_Default="OK" Control_Cancel="OK"/>
-    <ROW Dialog="MvServiceMsgDlg" HCentering="50" VCentering="50" Width="320" Height="120" Attributes="3" Title="[ProductName] [Setup]" Control_First="OK" Control_Default="OK" Control_Cancel="OK"/>
-    <ROW Dialog="MvTlsMsgDlg" HCentering="50" VCentering="50" Width="320" Height="120" Attributes="3" Title="[ProductName] [Setup]" Control_First="OK" Control_Default="OK" Control_Cancel="OK"/>
-    <ROW Dialog="MvRecoveryMsgDlg" HCentering="50" VCentering="50" Width="320" Height="120" Attributes="3" Title="[ProductName] [Setup]" Control_First="OK" Control_Default="OK" Control_Cancel="OK"/>
     <ROW Dialog="SqlDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_First="ServerEdit" Control_Default="Next" Control_Cancel="Cancel"/>
     <ROW Dialog="ServiceDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_First="KindGroup" Control_Default="Next" Control_Cancel="Cancel"/>
   </COMPONENT>

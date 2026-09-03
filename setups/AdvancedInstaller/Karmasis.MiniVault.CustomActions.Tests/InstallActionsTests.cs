@@ -509,6 +509,50 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             session.GetProperty(InstallActions.ConnectionStringProperty).ShouldBe("Server=typed;Database=X;Integrated Security=true");
         }
 
+        // -------------------------------------------------------------------
+        // ShowUiMessage
+        // -------------------------------------------------------------------
+
+        [Theory]
+        [InlineData("info", true)]
+        [InlineData("INFO", true)]
+        [InlineData("warn", false)]
+        [InlineData("", false)]
+        public void ShowUiMessage_ShowsMvUiErrorWithTheKindAsIcon(string kind, bool expectInfo)
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.UiMessageProperty, "Connection succeeded.");
+            session.SetProperty(InstallActions.UiMessageKindProperty, kind);
+            string shownText = null; bool? shownInfo = null;
+
+            InstallActions.ShowUiMessage(session, (text, info) => { shownText = text; shownInfo = info; }).ShouldBe((int)ActionResult.Success);
+
+            shownText.ShouldBe("Connection succeeded.");
+            shownInfo.ShouldBe(expectInfo);
+        }
+
+        [Fact]
+        public void ShowUiMessage_WithNothingToShow_DoesNotOpenABox()
+        {
+            var session = new FakeMsiSession();
+            var shown = false;
+
+            InstallActions.ShowUiMessage(session, (text, info) => shown = true).ShouldBe((int)ActionResult.Success);
+
+            shown.ShouldBeFalse();
+        }
+
+        [Fact]
+        public void ShowUiMessage_WhenTheBoxThrows_LogsAndSucceeds()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.UiMessageProperty, "boom");
+
+            InstallActions.ShowUiMessage(session, (text, info) => { throw new InvalidOperationException("no desktop"); }).ShouldBe((int)ActionResult.Success);
+
+            session.HasMessage(InstallMessage.ERROR).ShouldBeFalse();
+        }
+
         [Fact]
         public void BuildConnectionString_WithoutAServer_LeavesASilentInstallsConnectionStringAlone()
         {

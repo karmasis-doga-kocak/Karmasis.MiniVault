@@ -525,8 +525,9 @@ if ($components.ContainsKey('caphyon.advinst.msicomp.MsiCheckBoxComponent')) {
     $checkBoxRows = @($components['caphyon.advinst.msicomp.MsiCheckBoxComponent'].ROW)
 }
 
-$messageDialogs = @('MvSqlMsgDlg', 'MvServiceMsgDlg', 'MvTlsMsgDlg', 'MvRecoveryMsgDlg')
-foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg') + $messageDialogs) {
+# Dialogs without the wizard chrome (none at the moment: messages are MessageBoxes from ShowUiMessage).
+$messageDialogs = @()
+foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg')) {
     if ($ownDialogs -contains $dialog) { Write-Ok "dialog declared: $dialog" } else { Write-Fail "dialog not declared: $dialog" }
 }
 
@@ -672,31 +673,35 @@ foreach ($doAction in $dialogDoActions) {
 }
 # The SQL page must actually test something: compose, test, show the result.
 $testSequence = @($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'DoAction' } | Sort-Object { [int]$_.Ordering } | ForEach-Object { $_.Argument }) -join ' > '
-if ($testSequence -eq 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER_2 > TestSqlConnection') {
+$expectedTest = 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER_2 > TestSqlConnection > AI_DATA_SETTER_7 > ShowUiMessage'
+if ($testSequence -eq $expectedTest) {
     Write-Ok "SqlDlg.TestButton: $testSequence"
 } else {
-    Write-Fail "SqlDlg.TestButton actions are '$testSequence'; expected 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER_2 > TestSqlConnection'"
+    Write-Fail "SqlDlg.TestButton actions are '$testSequence'; expected '$expectedTest'"
 }
-# Results and validation messages are shown by moving to a small message page and back (NewDialog both
-# ways). SpawnDialog from a control that also refreshes the page is silently dropped by Advanced
-# Installer's UI engine (seen in a verbose log), so no page may rely on it for anything but CancelDlg.
-if (@($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'NewDialog' -and $_.Argument -eq 'MvSqlMsgDlg' }).Count -eq 1) {
-    Write-Ok 'SqlDlg.TestButton shows MV_SQL_RESULT on MvSqlMsgDlg'
+# Results and validation messages are MessageBoxes opened by the ShowUiMessage custom action (the
+# InfraskopeServer setup's pattern). SpawnDialog from a control that also refreshes the page is
+# silently dropped by Advanced Installer's UI engine, and NewDialog replaces the wizard window, so
+# neither may be used for a message; every [MV_UI_ERROR] setter must be followed by ShowUiMessage on
+# the same control.
+if (@($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'DoAction' -and $_.Argument -eq 'ShowUiMessage' }).Count -eq 1) {
+    Write-Ok 'SqlDlg.TestButton shows MV_SQL_RESULT through ShowUiMessage'
 } else {
-    Write-Fail 'SqlDlg.TestButton does not open MvSqlMsgDlg with the test result'
+    Write-Fail 'SqlDlg.TestButton does not run ShowUiMessage with the test result'
 }
 foreach ($spawn in @($eventRows | Where-Object { $_.Event -eq 'SpawnDialog' -and $_.Argument -ne 'CancelDlg' -and ($ownDialogs -contains $_.Dialog_) })) {
-    Write-Fail "$($spawn.Dialog_).$($spawn.Control_) spawns '$($spawn.Argument)': SpawnDialog is unreliable here, use NewDialog to a message page"
+    Write-Fail "$($spawn.Dialog_).$($spawn.Control_) spawns '$($spawn.Argument)': SpawnDialog is unreliable here, use ShowUiMessage"
 }
-$messageReturns = @{ 'MvSqlMsgDlg' = 'SqlDlg'; 'MvServiceMsgDlg' = 'ServiceDlg'; 'MvTlsMsgDlg' = 'TlsDlg'; 'MvRecoveryMsgDlg' = 'RecoveryDlg' }
-foreach ($message in $messageReturns.Keys) {
-    if (@($eventRows | Where-Object { $_.Dialog_ -eq $message -and $_.Control_ -eq 'OK' -and $_.Event -eq 'NewDialog' -and $_.Argument -eq $messageReturns[$message] }).Count -eq 1) {
-        Write-Ok "$message.OK returns to $($messageReturns[$message])"
+foreach ($stray in @($eventRows | Where-Object { $_.Event -eq 'NewDialog' -and $_.Argument -match 'MsgDlg$|MvErrorDlg' })) {
+    Write-Fail "$($stray.Dialog_).$($stray.Control_) opens message page '$($stray.Argument)': use ShowUiMessage instead"
+}
+$messageSetters = @($eventRows | Where-Object { $_.Event -eq '[MV_UI_ERROR]' -and $_.Argument -ne '{}' } | ForEach-Object { "$($_.Dialog_)#$($_.Control_)" } | Sort-Object -Unique)
+foreach ($key in $messageSetters) {
+    $parts = $key -split '#'
+    if (@($eventRows | Where-Object { $_.Dialog_ -eq $parts[0] -and $_.Control_ -eq $parts[1] -and $_.Event -eq 'DoAction' -and $_.Argument -eq 'ShowUiMessage' }).Count -ge 1) {
+        Write-Ok "$key sets MV_UI_ERROR and shows it"
     } else {
-        Write-Fail "$message.OK does not return to $($messageReturns[$message])"
-    }
-    if (-not (Test-ControlExists $message 'Message') -or -not (Test-ControlExists $message 'OK')) {
-        Write-Fail "$message lacks its Message text or OK button"
+        Write-Fail "$key sets MV_UI_ERROR but never runs ShowUiMessage"
     }
 }
 

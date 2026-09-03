@@ -594,12 +594,14 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
 - İlk GUI denemesinin bulguları: (1) Transparent (0x10000) gövde metinleri yazarken radio/etiketleri
   siliyor → banner dışı tüm metinler opak (3 / 131075). (2) Advanced Installer'ın UI motoru, aynı
   kontrol `NewDialog`/`[AiRefreshDlg]` de yayınlıyorsa `SpawnDialog`'u sessizce atlıyor (logda
-  property set ediliyor, "Dialog created" hiç yok). Mesajlar bu yüzden `NewDialog` ile açılan küçük
-  mesaj sayfalarıyla gösterilir (`MvSqlMsgDlg`, `MvServiceMsgDlg`, `MvTlsMsgDlg`, `MvRecoveryMsgDlg`;
-  ikon + metin + OK, OK ilgili sayfaya `NewDialog` ile döner ve sayfayı yeniden oluşturur).
-  (3) SQL sayfasında Next yalnızca test başarılıysa etkin (`MV_SQL_OK`), radio/checkbox değişimi
-  sıfırlar, Next testi yeniden koşturur; SQL Server Authentication seçimi uyarı sayfası açar; test
-  sonucu bilgi/ünlem ikonlu mesaj sayfasında gösterilir. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  property set ediliyor, "Dialog created" hiç yok); `NewDialog` ile mesaj sayfası ise sihirbaz
+  penceresinin yerine geçiyor. Mesajlar bu yüzden InfraskopeServer kurulumundaki gibi gerçek
+  MessageBox: kontrol `MV_UI_ERROR` + `MV_UI_KIND` (info/warn) set eder, `AI_DATA_SETTER_7` +
+  `ShowUiMessage` (immediate managed action) sihirbaz penceresini sahip alarak
+  `MessageBox.Show` açar; `UILevel` 5 değilse yalnızca loglar. (3) SQL sayfasında Next yalnızca test
+  başarılıysa etkin (`MV_SQL_OK`), radio/checkbox değişimi sıfırlar, Next testi yeniden koşturur; SQL
+  Server Authentication seçimi uyarı kutusu açar; test sonucu bilgi/uyarı ikonlu kutuda gösterilir.
+  Custom action testleri: 80. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
   tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
   `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
   doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);

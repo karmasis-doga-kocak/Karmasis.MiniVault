@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Windows.Forms;
 using Karmasis.AdvancedInstallerKit;
 
 namespace Karmasis.MiniVault.CustomActions
@@ -539,6 +540,63 @@ namespace Karmasis.MiniVault.CustomActions
         private static bool IsTicked(string value)
         {
             return !string.IsNullOrEmpty(value) && value.Trim() == "1";
+        }
+
+        // -------------------------------------------------------------------
+        // ShowUiMessage (immediate, dialogs only)
+        // -------------------------------------------------------------------
+
+        internal const string UiMessageProperty = "MV_UI_ERROR";
+        internal const string UiMessageKindProperty = "MV_UI_KIND";
+        internal const string UiMessageTitle = "Karmasis MiniVault Setup";
+
+        /// <summary>
+        /// Shows MV_UI_ERROR in a modal message box parented to the wizard window - the same pattern
+        /// Karmasis.InfraskopeServer's setup uses for its "Verify" buttons. MV_UI_KIND "info" picks the
+        /// information icon, anything else the warning icon. Dialog pages run it (after their own
+        /// data setter) where a SpawnDialog would otherwise be used; Advanced Installer's UI engine drops a
+        /// SpawnDialog published by a control that also refreshes the page, a MessageBox is not affected.
+        /// Outside the full UI (UILevel other than 5) the message only goes to the log. Never fails.
+        /// </summary>
+        public static int ShowUiMessage(string sessionHandle)
+        {
+            var session = new MsiSession(sessionHandle);
+            return ShowUiMessage(session, (text, info) =>
+            {
+                if (session.GetProperty("UILevel") != "5")
+                {
+                    session.Log("MiniVault: " + text, InstallMessage.INFO);
+                    return;
+                }
+
+                MessageBox.Show(
+                    new Win32Window(session.GetMsiWindowHandle()),
+                    text,
+                    UiMessageTitle,
+                    MessageBoxButtons.OK,
+                    info ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            });
+        }
+
+        internal static int ShowUiMessage(IMsiSession session, Action<string, bool> show)
+        {
+            try
+            {
+                var text = session.GetProperty(UiMessageProperty);
+                if (string.IsNullOrEmpty(text) || text.Trim().Length == 0)
+                {
+                    return (int)ActionResult.Success;
+                }
+
+                var kind = session.GetProperty(UiMessageKindProperty) ?? string.Empty;
+                show(text, kind.Trim().Equals("info", StringComparison.OrdinalIgnoreCase));
+                return (int)ActionResult.Success;
+            }
+            catch (Exception ex)
+            {
+                session.Log("MiniVault: could not show the message: " + ex.Message, InstallMessage.INFO);
+                return (int)ActionResult.Success;
+            }
         }
 
         /// <summary>

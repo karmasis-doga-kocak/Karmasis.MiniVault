@@ -331,7 +331,7 @@ On the SQL page *Next* is enabled only after a successful *Test connection* (`MV
 `MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
 edited after the test is caught too. Choosing SQL Server Authentication pops up a warning that
 Windows Authentication is recommended (the login and password end up in `appsettings.json`). The
-test result (`MV_SQL_RESULT`) is shown on the message page with an info or exclamation icon; the
+test result (`MV_SQL_RESULT`) is shown in a message box with an information or warning icon; the
 page itself only carries a one-line hint about the Next lock.
 
 Two Windows Installer rules learned from verbose logs of test runs: body text must not be
@@ -340,16 +340,18 @@ edit makes radio buttons and labels vanish while typing (the theme only uses it 
 bitmap; our body texts are `3` / `131075`); and **`SpawnDialog` is silently dropped** by Advanced
 Installer's UI engine when the same control also publishes `[AiRefreshDlg]`/`NewDialog` (the log
 shows the property being set and then straight on to the next dialog, never a "Dialog created" for
-the spawned one). Messages therefore use `NewDialog` both ways instead.
+the spawned one). `NewDialog` to a small page is not an option either: it replaces the wizard window.
 
-A failed check, and the connection-test result, set `MV_UI_ERROR` and move to a small message page
-(`MvSqlMsgDlg`, `MvServiceMsgDlg`, `MvTlsMsgDlg`, `MvRecoveryMsgDlg`: an icon, the text, OK) whose OK
-button comes back with `NewDialog` to the page it belongs to; the forward `NewDialog` carries the
-complementary condition. Coming back re-creates the page, which is also how the Next lock and the
-Enable/Disable rules get re-applied — MSI evaluates `ControlCondition` rows only when a page is
-built, so the check boxes and radio groups raise `[AiRefreshDlg]=1` (compiled by Advanced Installer
-into a `NewDialog` to a generated `<Dialog>_1` clone) for the same effect. `MvSqlMsgDlg` shows the
-info icon or the exclamation icon according to `MV_UI_KIND` (`info` after a successful test).
+Messages are therefore real message boxes, the way the InfraskopeServer setup does it: a control
+sets `MV_UI_ERROR` (and `MV_UI_KIND` = `info` or `warn`), then runs `AI_DATA_SETTER_7` +
+`ShowUiMessage`, an immediate managed action that calls `MessageBox.Show` with the wizard window as
+owner (`Win32Window(session.GetMsiWindowHandle())`, information or warning icon, title "Karmasis
+MiniVault Setup"). Outside the full UI (`UILevel` ≠ 5) it only logs. The connection-test result,
+the SQL-authentication warning and every Next-button validation use it. After the box the control
+raises `[AiRefreshDlg]=1` (compiled by Advanced Installer into a `NewDialog` to a generated
+`<Dialog>_1` clone) so the Next lock and the Enable/Disable `ControlCondition` rows — which MSI
+evaluates only when a page is built — are re-applied; the forward `NewDialog` carries the
+complementary condition (`MV_SQL_OK = "1"`, `MV_UI_ERROR = ""`).
 
 `threshold <= shares` is the one rule the dialog cannot express (MSI conditions compare two
 properties as strings), so `ValidateProperties` — immediate, before `InstallInitialize` — checks the
