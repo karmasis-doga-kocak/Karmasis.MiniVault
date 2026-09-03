@@ -309,10 +309,10 @@ stages:
 
 # ---------------------------------------------------------------------------------------
 # Stage 4 (optional, off by default): build the custom actions and the MSI. Turn on by
-# setting the buildMsi variable to 'true'. Requires an agent with Visual Studio / VS Build
-# Tools (for MSBuild) AND a licensed Advanced Installer install (AdvancedInstaller.com on
-# PATH, or the "Advanced Installer Tool Installer" / AdvancedInstaller@2 marketplace
-# extension) - see setups/AdvancedInstaller/README.md.
+# setting the buildMsi variable to 'true'. Requires an agent with the .NET 10 SDK AND a
+# licensed Advanced Installer install (AdvancedInstaller.com on PATH, or the "Advanced
+# Installer Tool Installer" / AdvancedInstaller@2 marketplace extension) - see
+# setups/AdvancedInstaller/README.md.
 # ---------------------------------------------------------------------------------------
 - stage: msi
   displayName: msi
@@ -343,45 +343,37 @@ stages:
           if (Test-Path $target) { Remove-Item $target -Recurse -Force }
           Move-Item $downloaded $target
 
-    # NOTE (build agent requirement): Karmasis.AdvancedInstallerKit (referenced by the custom
-    # actions csproj) lives on artifactrepodev only, and this classic csproj must be built
-    # with MSBuild - `dotnet build` fails with CS0246 (see the csproj header comment and
-    # setups/AdvancedInstaller/README.md, "Building the custom actions").
-    # RestoreConfigFile is resolved relative to each project's own directory, not to the repo root,
-    # so it has to be an absolute path here - a bare 'nuget-dev.config' would be looked for next to
-    # the csproj and silently fall back to the machine-wide NuGet.config. The branch condition
-    # matches the buildAndTest stage: dev/feature restores from artifactrepodev, master from
-    # artifactrepo.
-    - task: MSBuild@1
+    # The custom actions are part of Karmasis.MiniVault.sln, so buildAndTest already built and
+    # tested them; this stage may run on a different agent, though, so the Release DLL the .aip
+    # references (bin\Release\Karmasis.MiniVault.CustomActions.dll) is built again here. The restore
+    # config is branch-conditioned exactly like buildAndTest: dev/feature from artifactrepodev
+    # (Karmasis.AdvancedInstallerKit lives only there), master from artifactrepo.
+    - task: DotNetCoreCLI@2
       condition: ne(variables['Build.SourceBranch'], 'refs/heads/master')
       displayName: 'Restore custom actions (dev/feature - nuget-dev.config)'
       inputs:
-        solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
-        msbuildArguments: '/t:Restore /p:RestoreConfigFile=$(Build.SourcesDirectory)/nuget-dev.config'
+        command: 'restore'
+        projects: 'setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions/Karmasis.MiniVault.CustomActions.csproj'
+        feedsToUse: 'config'
+        nugetConfigPath: 'nuget-dev.config'
+        externalFeedCredentials: 'artifactrepo-nuget-feed, artifactrepodev-nuget-feed'
 
-    - task: MSBuild@1
+    - task: DotNetCoreCLI@2
       condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
       displayName: 'Restore custom actions (master - nuget-release.config)'
       inputs:
-        solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
-        msbuildArguments: '/t:Restore /p:RestoreConfigFile=$(Build.SourcesDirectory)/nuget-release.config'
+        command: 'restore'
+        projects: 'setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions/Karmasis.MiniVault.CustomActions.csproj'
+        feedsToUse: 'config'
+        nugetConfigPath: 'nuget-release.config'
+        externalFeedCredentials: 'artifactrepo-nuget-feed'
 
-    - task: MSBuild@1
-      displayName: 'Build custom actions (MSBuild, Release)'
-      inputs:
-        solution: 'setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln'
-        configuration: 'Release'
-        msbuildArguments: '/t:Build'
-
-    # The setup solution is not part of Karmasis.MiniVault.sln, so the buildAndTest stage never runs
-    # these tests: without this step the custom actions ship untested. net48 tests, run with the .NET
-    # CLI against the MSBuild output above (--no-build, same Release configuration).
     - task: DotNetCoreCLI@2
-      displayName: 'Run custom action tests'
+      displayName: 'Build custom actions (Release)'
       inputs:
-        command: 'test'
-        projects: 'setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions.Tests/Karmasis.MiniVault.CustomActions.Tests.csproj'
-        arguments: '--configuration Release --no-build --logger trx --results-directory $(Agent.TempDirectory)'
+        command: 'build'
+        projects: 'setups/AdvancedInstaller/Karmasis.MiniVault.CustomActions/Karmasis.MiniVault.CustomActions.csproj'
+        arguments: '--configuration Release --no-restore'
 
     # NOTE (agent requirement): this task needs a licensed Advanced Installer install on the
     # agent - AdvancedInstaller.com on PATH (installed by the "Advanced Installer Tool

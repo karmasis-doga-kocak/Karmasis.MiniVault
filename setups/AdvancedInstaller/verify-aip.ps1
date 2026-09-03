@@ -317,16 +317,17 @@ if (-not (Test-Path -LiteralPath $customActionsProject)) {
     Write-Fail "not found: $customActionsProject"
 } else {
     $projectXml = [xml](Get-Content -LiteralPath $customActionsProject -Raw)
-    $namespaceManager = New-Object System.Xml.XmlNamespaceManager($projectXml.NameTable)
-    $namespaceManager.AddNamespace('msb', 'http://schemas.microsoft.com/developer/msbuild/2003')
-
-    $outputPaths = @($projectXml.SelectNodes('//msb:OutputPath', $namespaceManager) |
+    # local-name() so the lookup works for both an SDK-style project (no namespace) and a classic
+    # one (the 2003 msbuild namespace).
+    $outputPaths = @($projectXml.SelectNodes("//*[local-name()='OutputPath']") |
         ForEach-Object { $_.InnerText } | Select-Object -Unique)
     if ($outputPaths.Count -eq 0) {
-        # SDK-style project: bin\<Configuration>\<TargetFramework>\.
+        # No explicit OutputPath: the SDK default (bin\<Configuration>\<TargetFramework>\) would not
+        # match the .aip, which references bin\Release\ directly.
+        Write-Fail "no <OutputPath> in $customActionsProject; the .aip expects bin\Release\"
         $outputPaths = @('bin\Release\')
     }
-    $assemblyNameNode = $projectXml.SelectSingleNode('//msb:AssemblyName', $namespaceManager)
+    $assemblyNameNode = $projectXml.SelectSingleNode("//*[local-name()='AssemblyName']")
     $assemblyName = if ($null -ne $assemblyNameNode) { $assemblyNameNode.InnerText } else { 'Karmasis.MiniVault.CustomActions' }
     Write-Ok "project output path(s): $($outputPaths -join ', ') (assembly: $assemblyName)"
 
@@ -353,7 +354,7 @@ if (-not (Test-Path -LiteralPath $customActionsProject)) {
         } elseif (Test-Path -LiteralPath $referenced -PathType Leaf) {
             Write-Ok "built assembly present: $referenced"
         } else {
-            Write-Fail "built assembly missing: $referenced (build Karmasis.MiniVault.Setup.sln first)"
+            Write-Fail "built assembly missing: $referenced (run 'dotnet build Karmasis.MiniVault.sln -c Release' first)"
         }
     }
 

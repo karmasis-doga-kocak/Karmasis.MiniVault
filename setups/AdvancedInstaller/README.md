@@ -6,9 +6,8 @@ The Windows MSI for the MiniVault server. It performs the same six steps as
 | Path | What it is |
 | --- | --- |
 | `Karmasis.MiniVault/Karmasis.MiniVault.aip` | The Advanced Installer project (AI 22.x XML). |
-| `Karmasis.MiniVault.CustomActions/` | Classic .NET Framework 4.8 class library with the three custom actions. |
-| `Karmasis.MiniVault.CustomActions.Tests/` | net48 xUnit tests for that library. |
-| `Karmasis.MiniVault.Setup.sln` | Solution holding those two projects. **Not** part of `Karmasis.MiniVault.sln`. |
+| `Karmasis.MiniVault.CustomActions/` | net48 class library (SDK-style csproj) with the custom actions. Part of `Karmasis.MiniVault.sln`. |
+| `Karmasis.MiniVault.CustomActions.Tests/` | net48 xUnit tests for that library. Part of `Karmasis.MiniVault.sln`. |
 | `verify-aip.ps1` | Static checks on the `.aip` (no Advanced Installer needed). |
 | `img/` | Banner/background bitmaps and the icon, copied from the DAM Collector setup. |
 
@@ -37,9 +36,9 @@ The MSI build depends on two outputs that must exist first.
 # 1. The payload: self-contained win-x64 publish of the server.
 dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64
 
-# 2. The custom actions (see "Building the custom actions" for why this is msbuild, not dotnet).
-msbuild setups\AdvancedInstaller\Karmasis.MiniVault.Setup.sln /t:Restore /p:Configuration=Release
-msbuild setups\AdvancedInstaller\Karmasis.MiniVault.Setup.sln /t:Build   /p:Configuration=Release
+# 2. The custom actions. Part of Karmasis.MiniVault.sln, so a plain `dotnet build` at the repo root
+#    builds them too; this builds just the one project (see "Building the custom actions").
+dotnet build setups\AdvancedInstaller\Karmasis.MiniVault.CustomActions\Karmasis.MiniVault.CustomActions.csproj -c Release
 
 # 3. Sanity check before handing the project to Advanced Installer.
 .\setups\AdvancedInstaller\verify-aip.ps1
@@ -54,24 +53,26 @@ Step 4 writes `setups/AdvancedInstaller/Karmasis.MiniVault/Setup Files/Karmasis.
 **Task 5 (Azure Pipelines) needs an agent with Advanced Installer installed** — a licensed
 `AdvancedInstaller.com` on `PATH`, or the `AdvancedInstaller@2`/`Advanced Installer Tool Installer`
 marketplace task. The publish and custom-actions steps run on any Windows agent with the .NET 10
-SDK and MSBuild; only step 4 is gated on Advanced Installer.
+SDK; only step 4 is gated on Advanced Installer.
 
 ### Building the custom actions
 
-`Karmasis.MiniVault.CustomActions.csproj` is a **classic (non-SDK) csproj**, deliberately, so it
-matches `Karmasis.DataskopeCollector.CustomActions` in the Collector repo. That has one practical
-consequence: `dotnet build` cannot build it. The .NET SDK's MSBuild does not import
-`Microsoft.NuGet.targets`, which is what resolves `PackageReference` for legacy projects, so the
-build fails with `CS0246: ... 'IMsiSession' could not be found` even after a successful restore.
-Use MSBuild from Visual Studio / Visual Studio Build Tools (`vswhere -property installationPath`),
-as above. The tests can then be run with the .NET CLI against the already-built output:
+`Karmasis.MiniVault.CustomActions.csproj` is an SDK-style project targeting `net48`, and it is part
+of `Karmasis.MiniVault.sln` together with its test project — `dotnet build` and `dotnet test` at the
+repo root cover both. (The Collector repo keeps its custom actions as a classic, non-SDK csproj;
+that format cannot be built with `dotnet build`, which is why this one differs. Advanced Installer's
+`DotNetMethodCaller.dll` only needs a net48 assembly and does not care about the project format.)
+
+The assembly attributes live in `Properties\AssemblyInfo.cs` (`GenerateAssemblyInfo` is off), and
+both configurations write to `bin\Release\` on purpose (`AppendTargetFrameworkToOutputPath` is
+off): the paths in the `.aip` then never depend on which configuration was built. The tests are
+net48 and so run only on Windows; on Linux they build but cannot execute.
+
+To run just these tests:
 
 ```powershell
-dotnet test setups\AdvancedInstaller\Karmasis.MiniVault.CustomActions.Tests\Karmasis.MiniVault.CustomActions.Tests.csproj -c Release --no-build
+dotnet test setups\AdvancedInstaller\Karmasis.MiniVault.CustomActions.Tests\Karmasis.MiniVault.CustomActions.Tests.csproj -c Release
 ```
-
-Both configurations write to `bin\Release\`, on purpose: the paths in the `.aip` then never depend
-on which configuration was built.
 
 ### The Karmasis.AdvancedInstallerKit package
 
@@ -82,7 +83,7 @@ so a clean agent needs a config that does — the same `nuget-dev.config` the Do
 that supplies `NUGET_AUTH_TOKEN` / `VSS_NUGET_EXTERNAL_FEED_ENDPOINTS`):
 
 ```powershell
-msbuild setups\AdvancedInstaller\Karmasis.MiniVault.Setup.sln /t:Restore /p:RestoreConfigFile=nuget-dev.config
+dotnet restore Karmasis.MiniVault.sln --configfile nuget-dev.config
 ```
 
 On a developer machine that already has the package in `%USERPROFILE%\.nuget\packages`, restore

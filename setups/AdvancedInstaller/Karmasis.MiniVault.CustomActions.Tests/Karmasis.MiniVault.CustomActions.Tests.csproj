@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    net48 so it can reference the classic custom-actions project. Deliberately NOT part of
-    Karmasis.MiniVault.sln; it lives in setups/AdvancedInstaller/Karmasis.MiniVault.Setup.sln.
+    net48 so it can reference the custom-actions project (net48, loaded by Advanced Installer).
+    Part of Karmasis.MiniVault.sln: `dotnet test` at the repo root runs these on Windows.
   -->
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
@@ -12,7 +12,7 @@
     <IsTestProject>true</IsTestProject>
     <AssemblyName>Karmasis.MiniVault.CustomActions.Tests</AssemblyName>
     <RootNamespace>Karmasis.MiniVault.CustomActions.Tests</RootNamespace>
-    <!-- The classic project restores implicit RIDs; keep the graph in sync for this one too. -->
+    <!-- Same RID set as the custom-actions project, so the two restore graphs stay in sync. -->
     <RuntimeIdentifiers>win;win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>

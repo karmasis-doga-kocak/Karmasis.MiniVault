@@ -420,7 +420,8 @@ Hata gövdesi boş gelebilir. İstek yolunda sır adı ham `/` ile taşınır (s
   `SeServiceLogonRight` verilir. Çalışma zamanı SQL rolü `db_datareader` + `db_datawriter`; şema
   değişikliği operatörün işidir.
 - Advanced Installer projesi `setups/AdvancedInstaller/` altında XML (`.aip`) olarak yazılmıştır;
-  custom action assembly'si net48'dir ve Visual Studio MSBuild ile derlenir. Kurulum `MV_*`
+  custom action assembly'si net48'dir (SDK-style csproj, `Karmasis.MiniVault.sln` içinde, `dotnet build`
+  ile derlenir). Kurulum `MV_*`
   property'leri ile yapılandırılır. Sır taşıyan property'ler ve deferred custom action veri
   property'leri (`WriteMachineConfig`, `RunInit`) `MsiHiddenProperties` listesindedir; `"` içeren
   değerler baştan reddedilir. Servis kurulumda başlatılır (`MsiServCtrl Event=163`). Upgrade'de
@@ -535,8 +536,8 @@ Her adım ayrı implementasyon planı ve PR.
   `docker/Dockerfile` + `docker-compose.yml`, Advanced Installer `.aip` ve net48 custom action'ları,
   `azure-pipelines.yml`.
 - Testler: `MiniVault.Server.Tests` 222 test (LocalDB gerektirir), `MiniVault.Client.Tests` 121 test
-  (net10) / 120 test (net48), MSI custom action test projesinde 42 test metodu (Visual Studio MSBuild
-  ile derlenir; bu makinede koşturulmadı).
+  (net10) / 120 test (net48), MSI custom action test projesinde 54 test (net48, ana solution'da,
+  `dotnet test` ile koşar).
 
 **Henüz doğrulanmamış.**
 
