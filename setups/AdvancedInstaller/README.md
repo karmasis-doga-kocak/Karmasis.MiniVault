@@ -330,9 +330,10 @@ On the SQL page *Next* is enabled only after a successful *Test connection* (`MV
 `ControlCondition` re-applied by the page refresh); changing a radio button or check box resets
 `MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
 edited after the test is caught too. While SQL Server Authentication is selected the page shows a
-two-line amber warning (`TextStyle` `MvWarnFont`, regular weight, `MsiTextStyleComponent`) that the login and
-password are stored on the server (DPAPI-protected, see below) and Windows Authentication is
-recommended; with Windows Authentication the same line holds the one-line hint about the Next lock.
+note (a bold "Note:" label in the theme's `DlgFontBold8` next to plain text — one `Text` control
+cannot mix styles) that a password is kept on the server, DPAPI-protected, while Windows
+Authentication needs none; with Windows Authentication the same spot holds the one-line hint about
+the Next lock. No colour: a password that exists but is protected is worth a note, not a warning.
 The test result (`MV_SQL_RESULT`) is shown in a message box with an information or warning icon.
 
 The connection string never reaches `appsettings.json` in clear text: `WriteMachineConfig` writes

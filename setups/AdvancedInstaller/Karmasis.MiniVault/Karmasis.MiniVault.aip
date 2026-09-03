@@ -979,7 +979,8 @@
     <ROW Dialog_="SqlDlg" Control="TestButton" Type="PushButton" X="276" Y="178" Width="84" Height="17" Attributes="3" Text="Test co&amp;nnection" Order="1800"/>
     <ROW Dialog_="SqlDlg" Control="CsEdit" Type="Edit" X="12" Y="196" Width="348" Height="16" Attributes="65539" Property="MV_CONNECTIONSTRING" Text="{2048}" Order="1900"/>
     <ROW Dialog_="SqlDlg" Control="StatusHint" Type="Text" X="12" Y="216" Width="348" Height="12" Attributes="131075" Text="Next is enabled once Test connection succeeds." Order="2000"/>
-    <ROW Dialog_="SqlDlg" Control="SqlWarn" Type="Text" X="12" Y="213" Width="348" Height="22" Attributes="131075" Text="{\MvWarnFont}Warning: the SQL login and password are stored on this server (DPAPI-protected). Windows Authentication is recommended." Order="2010"/>
+    <ROW Dialog_="SqlDlg" Control="SqlWarnLabel" Type="Text" X="12" Y="214" Width="28" Height="12" Attributes="131075" Text="{\DlgFontBold8}Note:" Order="2010"/>
+    <ROW Dialog_="SqlDlg" Control="SqlWarn" Type="Text" X="42" Y="214" Width="318" Height="20" Attributes="131075" Text="SQL Server Authentication keeps a password on this server (DPAPI-protected). Windows Authentication needs none and is preferred." Order="2020"/>
     <ROW Dialog_="SqlDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="2100"/>
     <ROW Dialog_="SqlDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="2200" TextLocId="-" Options="1"/>
     <ROW Dialog_="SqlDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="2300" TextLocId="-" Options="1"/>
@@ -1050,6 +1051,8 @@
     <ROW Dialog_="SqlDlg" Control_="StatusHint" Action="Show" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="StatusHint" Action="Hide" Condition="MV_SQL_AUTH = &quot;sql&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="SqlWarn" Action="Show" Condition="MV_SQL_AUTH = &quot;sql&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="SqlWarnLabel" Action="Show" Condition="MV_SQL_AUTH = &quot;sql&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="SqlWarnLabel" Action="Hide" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="SqlWarn" Action="Hide" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="Next" Action="Enable" Condition="MV_SQL_OK = &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="Next" Action="Disable" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;"/>
@@ -1700,9 +1703,6 @@
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiServInstComponent">
     <ROW ServiceInstall="minivault.exe" Name="[ServiceName]" DisplayName="[DisplayName]" ServiceType="16" StartType="2" ErrorControl="1" StartName="[MV_SERVICEACCOUNT]" Password="56F8CEBF2CEACC9E7D99BCE09BF6" Component_="minivault.exe" Description="Karmasis MiniVault secret vault server."/>
-  </COMPONENT>
-  <COMPONENT cid="caphyon.advinst.msicomp.MsiTextStyleComponent">
-    <ROW TextStyle="MvWarnFont" FaceName="Tahoma" Size="8" Color="36060" StyleBits="0"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiThemeComponent">
     <ATTRIBUTE name="UsedTheme" value="classic"/>
