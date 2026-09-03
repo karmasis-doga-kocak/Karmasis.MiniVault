@@ -366,7 +366,12 @@ namespace Karmasis.MiniVault.CustomActions
 
                 if (string.IsNullOrEmpty(connectionString) || connectionString.Trim().Length == 0)
                 {
-                    ReportSql(session, false, "No connection string was entered.", null);
+                    // Say what the page actually asked for: the server name in the normal mode, the
+                    // string itself in the advanced mode.
+                    var message = IsTicked(session.GetProperty(SqlAdvancedProperty))
+                        ? "Enter the connection string."
+                        : "Enter the server name (for example sql01, sql01\\INSTANCE or 192.168.1.45,1433).";
+                    ReportSql(session, false, message, null);
                     return (int)ActionResult.Success;
                 }
 

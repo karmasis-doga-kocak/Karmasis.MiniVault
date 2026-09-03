@@ -384,14 +384,26 @@ namespace Karmasis.MiniVault.CustomActions.Tests
         }
 
         [Fact]
-        public void TestSqlConnection_WithoutAConnectionString_SetsSqlOkToZero()
+        public void TestSqlConnection_WithoutAServerName_AsksForTheServerName()
         {
             var session = new FakeMsiSession();
 
             InstallActions.TestSqlConnection(session).ShouldBe((int)ActionResult.Success);
 
             session.GetProperty(InstallActions.SqlOkProperty).ShouldBe("0");
-            session.GetProperty(InstallActions.SqlErrorProperty).ShouldContain("No connection string");
+            session.GetProperty(InstallActions.SqlErrorProperty).ShouldContain("Enter the server name");
+        }
+
+        [Fact]
+        public void TestSqlConnection_InAdvancedModeWithoutAString_AsksForTheConnectionString()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty(InstallActions.SqlAdvancedProperty, "1");
+
+            InstallActions.TestSqlConnection(session).ShouldBe((int)ActionResult.Success);
+
+            session.GetProperty(InstallActions.SqlOkProperty).ShouldBe("0");
+            session.GetProperty(InstallActions.SqlErrorProperty).ShouldBe("Enter the connection string.");
         }
 
         [Fact]
