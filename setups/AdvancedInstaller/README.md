@@ -329,10 +329,11 @@ install never shows them and takes the same `MV_*` properties from the command l
 On the SQL page *Next* is enabled only after a successful *Test connection* (`MV_SQL_OK = "1"`, a
 `ControlCondition` re-applied by the page refresh); changing a radio button or check box resets
 `MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
-edited after the test is caught too. Choosing SQL Server Authentication pops up a warning that
-Windows Authentication is recommended (the login and password end up in `appsettings.json`). The
-test result (`MV_SQL_RESULT`) is shown in a message box with an information or warning icon; the
-page itself only carries a one-line hint about the Next lock.
+edited after the test is caught too. While SQL Server Authentication is selected the page shows a
+red, bold warning line (`TextStyle` `MvWarnFont`, `MsiTextStyleComponent`) that the login and
+password end up in `appsettings.json` and Windows Authentication is recommended; with Windows
+Authentication the same line holds the one-line hint about the Next lock. The test result
+(`MV_SQL_RESULT`) is shown in a message box with an information or warning icon.
 
 Two Windows Installer rules learned from verbose logs of test runs: body text must not be
 **Transparent** (attribute `0x10000`) — a transparent `Text` overlapping the repaint region of an
