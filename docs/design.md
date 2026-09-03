@@ -600,8 +600,16 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
   `ShowUiMessage` (immediate managed action) sihirbaz penceresini sahip alarak
   `MessageBox.Show` açar; `UILevel` 5 değilse yalnızca loglar. (3) SQL sayfasında Next yalnızca test
   başarılıysa etkin (`MV_SQL_OK`), radio/checkbox değişimi sıfırlar, Next testi yeniden koşturur; SQL
-  Server Authentication seçimi uyarı kutusu açar; test sonucu bilgi/uyarı ikonlu kutuda gösterilir.
-  Custom action testleri: 80. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  Server Authentication seçiliyken sayfada turuncu kalın uyarı satırı; test sonucu bilgi/uyarı ikonlu
+  kutuda gösterilir.
+- Connection string diskte artık düz metin değil: `ConnectionStrings:MiniVaultProtected` (DPAPI
+  LocalMachine, sabit uygulama entropisi `Karmasis.MiniVault.Config.v1`, base64). Server
+  `Hosting/ProtectedConfiguration` ile çözer; korumalı değer varsa düz `ConnectionStrings:MiniVault`'a
+  baskındır (binary'nin yanındaki LocalDB varsayılanı gölgeleyemesin diye). MSI (`ConfigProtection`),
+  `install.ps1` ve yeni `minivault protect --connection-string` komutu aynı biçimi üretir. Değer
+  makineye bağlıdır; başka host'a taşınan `appsettings.json` açılışta okunabilir bir hatayla düşer,
+  installer ya da `protect` ile yeniden üretilir. Linux/container düz string kullanmaya devam eder.
+  Testler: server 230, custom action 83. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
   tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
   `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
   doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);

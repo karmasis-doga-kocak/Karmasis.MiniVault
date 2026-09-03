@@ -12,7 +12,8 @@ Every key can be set in `appsettings.json`, as an environment variable (`Tls__Ur
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ConnectionStrings:MiniVault` | `Server=(localdb)\MSSQLLocalDB;Database=MiniVault;Integrated Security=true;TrustServerCertificate=true` | The MiniVault database. The shipped default is a developer LocalDB; every real install replaces it. |
+| `ConnectionStrings:MiniVault` | `Server=(localdb)\MSSQLLocalDB;Database=MiniVault;Integrated Security=true;TrustServerCertificate=true` | The MiniVault database, in clear text. The shipped default is a developer LocalDB; every real install replaces it — a Windows install with the protected form below. |
+| `ConnectionStrings:MiniVaultProtected` | `null` | The same connection string DPAPI-protected (LocalMachine scope, base64). **Wins over `ConnectionStrings:MiniVault` when set.** What the MSI and `install.ps1` write, so a SQL login's password never sits on disk in clear text; `minivault protect --connection-string "..."` prints the value for a hand-edited configuration. Bound to the machine that produced it: after a restore onto another host it has to be produced again there. Windows only. |
 | `MasterKey:Provider` | `Dpapi` | `Dpapi` (Windows file) or `Environment` (container). |
 | `MasterKey:Path` | `%ProgramData%\MiniVault\masterkey.bin` | `Dpapi` only: where the protected key file lives. |
 | `Tls:Url` | `https://0.0.0.0:8200` | The single endpoint Kestrel binds. Must be `https://` with an IP-literal host. |
@@ -43,6 +44,7 @@ Three environment variables are read directly rather than as configuration keys:
 | `minivault recover --new-master-key <pw\|auto>` | Replaces the master key from the recovery key or shares; rewraps every data key. |
 | `minivault rotate-dek` | Creates a new active data key. Needs a service restart afterwards. |
 | `minivault migrate` | Applies pending schema migrations. Run after an upgrade, before starting the service. |
+| `minivault protect --connection-string "..."` | Prints the DPAPI-protected form of a connection string for `ConnectionStrings:MiniVaultProtected`. Run on the host that will use it. |
 | `minivault client add\|remove\|assign\|enable\|disable\|list` | Manages client identities and their role assignments. |
 | `minivault role add\|remove\|grant\|list` | Manages roles and their scope rules. |
 | `minivault` (no command) | Starts the server. |
@@ -418,6 +420,28 @@ or, when nothing was pending:
 Database is up to date.
 ```
 
+### `minivault protect`
+
+Prints the DPAPI-protected form of a connection string, for `ConnectionStrings:MiniVaultProtected`.
+The installer and `install.ps1` produce this value themselves; use the command when you edit the
+machine configuration by hand, or after restoring onto a new host (the protected value from the old
+host cannot be unprotected anywhere else).
+
+```
+minivault protect --connection-string "Server=sql01;Database=MiniVault;User ID=minivault_svc;Password='...'"
+```
+
+```
+AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA...
+```
+
+Paste the output into `%ProgramData%\MiniVault\appsettings.json` as
+`"ConnectionStrings": { "MiniVault": null, "MiniVaultProtected": "<output>" }` and restart the service.
+Run it on the machine that will use the value: DPAPI (LocalMachine scope) binds it to that host.
+**Interactive use only:** the connection string is on the command line, so anything that can list
+processes — and command-line auditing — can read it. Windows only; a container reads
+`ConnectionStrings:MiniVault` from a mounted secret instead.
+
 ### `minivault` (no command)
 
 Starts the server. There is no `serve` subcommand: anything that is not one of the commands above
@@ -548,6 +572,11 @@ protected with `CurrentMachine`-scoped DPAPI, so a copy of the file is unreadabl
 than the one it was created on — restoring it to a new machine does not work, by design. The recovery
 material is what stands in for it when moving to a new host: `minivault recover` builds a fresh master
 key from the recovery key or Shamir shares and rewraps the existing data keys with it.
+
+The same applies to `ConnectionStrings:MiniVaultProtected` in `appsettings.json`: it is DPAPI-protected
+on the host that wrote it and unreadable elsewhere. A copied `appsettings.json` therefore fails the
+startup check on a new host with "could not be unprotected on this machine" — let the installer write
+the file again, or replace the value with the output of `minivault protect` run on the new host.
 
 ### Restoring onto a new host
 

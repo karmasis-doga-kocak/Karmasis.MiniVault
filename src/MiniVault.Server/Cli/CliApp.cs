@@ -13,7 +13,7 @@ public static class CliApp
 {
     /// <summary>Every first argument that means "this is an operator command, not the server". The documentation
     /// consistency test reads this list, so every <c>minivault &lt;word&gt;</c> in the docs has to appear here.</summary>
-    internal static readonly string[] CommandNames = ["init", "recover", "rotate-dek", "migrate", "client", "role", "--help", "-h", "-?", "--version"];
+    internal static readonly string[] CommandNames = ["init", "recover", "rotate-dek", "migrate", "protect", "client", "role", "--help", "-h", "-?", "--version"];
 
     /// <summary>Removes configuration-override tokens (e.g. --ConnectionStrings:MiniVault, --MasterKey:Provider) and their
     /// values from the args passed to System.CommandLine, so unknown CLI options are still rejected as parse errors.</summary>
@@ -46,6 +46,7 @@ public static class CliApp
         root.Subcommands.Add(RecoverCommand.Build(Services, output));
         root.Subcommands.Add(RotateDekCommand.Build(Services, output));
         root.Subcommands.Add(MigrateCommand.Build(Services, output));
+        root.Subcommands.Add(ProtectCommand.Build(output));
         root.Subcommands.Add(ClientCommand.Build(Services, output));
         root.Subcommands.Add(RoleCommand.Build(Services, output));
         // Operators pass configuration overrides (--ConnectionStrings:MiniVault, --MasterKey:Provider, ...) on the same

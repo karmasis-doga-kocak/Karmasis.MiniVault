@@ -45,7 +45,12 @@ namespace Karmasis.MiniVault.CustomActions.Tests
                 File.Exists(configPath).ShouldBeTrue();
 
                 var json = File.ReadAllText(configPath);
-                json.ShouldContain("\"MiniVault\": \"Server=sql01;Database=MiniVault;Integrated Security=true\"");
+                // The connection string is written DPAPI-protected only; the plain key is nulled out so the
+                // binary's own LocalDB default cannot shadow the protected value.
+                json.ShouldNotContain("Server=sql01");
+                json.ShouldContain("\"MiniVault\": null");
+                var protectedValue = System.Text.RegularExpressions.Regex.Match(json, "\"MiniVaultProtected\": \"([^\"]+)\"").Groups[1].Value;
+                ConfigProtection.Unprotect(protectedValue).ShouldBe("Server=sql01;Database=MiniVault;Integrated Security=true");
                 json.ShouldContain("\"Provider\": \"Dpapi\"");
                 json.ShouldContain("\"Thumbprint\": \"0123456789ABCDEF0123456789ABCDEF01234567\"");
                 json.ShouldContain("\"Url\": \"https://0.0.0.0:8200\"");

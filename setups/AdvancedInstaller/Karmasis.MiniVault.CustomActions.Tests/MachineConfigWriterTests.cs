@@ -149,6 +149,31 @@ namespace Karmasis.MiniVault.CustomActions.Tests
         }
 
         [Fact]
+        public void Render_WithAProtectedConnectionString_WritesOnlyTheProtectedFormAndNullsThePlainKey()
+        {
+            var json = MachineConfigWriter.Render(new MachineConfig
+            {
+                ConnectionString = "Server=sql01;Database=MiniVault;User ID=u;Password=p",
+                ProtectedConnectionString = "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA",
+                CertificateThumbprint = "0123456789ABCDEF0123456789ABCDEF01234567"
+            });
+
+            json.ShouldNotContain("Password=p");
+            var root = ParseJson(json);
+            Value(root, "ConnectionStrings", "MiniVault").ShouldBeNull();
+            Value(root, "ConnectionStrings", "MiniVaultProtected").ShouldBe("AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA");
+        }
+
+        [Fact]
+        public void ConfigProtection_RoundTripsOnThisMachine()
+        {
+            var protectedValue = ConfigProtection.Protect("Server=sql01;Database=MiniVault;User ID=u;Password='p;w'");
+
+            protectedValue.ShouldNotContain("sql01");
+            ConfigProtection.Unprotect(protectedValue).ShouldBe("Server=sql01;Database=MiniVault;User ID=u;Password='p;w'");
+        }
+
+        [Fact]
         public void NormalizeThumbprint_RejectsSomethingThatIsNotASha1Thumbprint()
         {
             Should.Throw<ArgumentException>(() => MachineConfigWriter.NormalizeThumbprint("0123456789"));

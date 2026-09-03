@@ -11,8 +11,13 @@ namespace Karmasis.MiniVault.CustomActions
     /// </summary>
     public sealed class MachineConfig
     {
-        /// <summary>ConnectionStrings:MiniVault. Required.</summary>
+        /// <summary>ConnectionStrings:MiniVault, the plain string. Required unless <see cref="ProtectedConnectionString"/> is set.</summary>
         public string ConnectionString { get; set; }
+
+        /// <summary>ConnectionStrings:MiniVaultProtected - the DPAPI-protected form (<see cref="ConfigProtection.Protect"/>).
+        /// When set it is what gets written, and ConnectionStrings:MiniVault is written as null so the binary's own
+        /// LocalDB default cannot shadow it.</summary>
+        public string ProtectedConnectionString { get; set; }
 
         /// <summary>MasterKey:Provider. Defaults to Dpapi for the Windows service install.</summary>
         public string MasterKeyProvider { get; set; }
@@ -84,7 +89,8 @@ namespace Karmasis.MiniVault.CustomActions
                 throw new ArgumentNullException("config");
             }
 
-            if (string.IsNullOrEmpty(config.ConnectionString))
+            var hasProtectedConnectionString = !string.IsNullOrEmpty(config.ProtectedConnectionString);
+            if (string.IsNullOrEmpty(config.ConnectionString) && !hasProtectedConnectionString)
             {
                 throw new ArgumentException("A connection string is required (MV_CONNECTIONSTRING).", "config");
             }
@@ -113,7 +119,17 @@ namespace Karmasis.MiniVault.CustomActions
             var json = new StringBuilder();
             json.Append("{\n");
             json.Append("  \"ConnectionStrings\": {\n");
-            json.Append("    \"MiniVault\": ").Append(JsonString(config.ConnectionString)).Append("\n");
+            if (hasProtectedConnectionString)
+            {
+                // Explicit null: a JSON null overrides the plain LocalDB default the binary's own appsettings.json
+                // carries, so only the protected value is left for the server to resolve.
+                json.Append("    \"MiniVault\": null,\n");
+                json.Append("    \"MiniVaultProtected\": ").Append(JsonString(config.ProtectedConnectionString)).Append("\n");
+            }
+            else
+            {
+                json.Append("    \"MiniVault\": ").Append(JsonString(config.ConnectionString)).Append("\n");
+            }
             json.Append("  },\n");
             json.Append("  \"MasterKey\": {\n");
             json.Append("    \"Provider\": ").Append(JsonString(provider)).Append("\n");

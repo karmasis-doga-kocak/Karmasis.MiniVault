@@ -40,10 +40,35 @@ public class CliAppTests : IAsyncLifetime
     [InlineData(new[] { "recover" }, true)]
     [InlineData(new[] { "rotate-dek" }, true)]
     [InlineData(new[] { "migrate" }, true)]
+    [InlineData(new[] { "protect" }, true)]
     [InlineData(new[] { "--help" }, true)]
     [InlineData(new[] { "serve" }, false)]
     [InlineData(new string[0], false)]
     public void IsCliInvocation_DetectsCommands(string[] args, bool expected) => CliApp.IsCliInvocation(args).ShouldBe(expected);
+
+    [Fact]
+    public async Task Protect_PrintsAValueThatUnprotectsToTheInput()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var (code, output) = await Run("protect", "--connection-string", "Server=sql01;Database=MiniVault;User ID=u;Password='p;w'");
+
+        code.ShouldBe(0, output);
+        var line = output.Trim();
+        line.ShouldNotContain("sql01");
+        MiniVault.Server.Hosting.ProtectedConfiguration.Unprotect(line).ShouldBe("Server=sql01;Database=MiniVault;User ID=u;Password='p;w'");
+    }
+
+    [Fact]
+    public async Task Protect_RejectsADoubleQuote()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var (code, output) = await Run("protect", "--connection-string", "Server=sql01;Password=\"x\"");
+
+        code.ShouldBe(1);
+        output.ShouldContain("double quote");
+    }
 
     [Fact]
     public async Task Migrate_OnFreshDatabase_AppliesMigrations_ThenIsUpToDate_ThenInitStillWorks()

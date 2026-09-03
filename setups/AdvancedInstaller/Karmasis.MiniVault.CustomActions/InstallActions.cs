@@ -114,9 +114,13 @@ namespace Karmasis.MiniVault.CustomActions
                     return (int)ActionResult.Success;
                 }
 
+                // The connection string goes to disk DPAPI-protected (LocalMachine), never in clear text: a SQL
+                // login's password would otherwise sit in appsettings.json guarded only by the folder ACL. The
+                // action runs on the target machine, which is what binds the value to it.
                 var config = new MachineConfig
                 {
                     ConnectionString = model.ConnectionString,
+                    ProtectedConnectionString = string.IsNullOrEmpty(model.ConnectionString) ? null : ConfigProtection.Protect(model.ConnectionString),
                     MasterKeyProvider = MachineConfigWriter.DefaultMasterKeyProvider,
                     Url = model.Url,
                     CertificatePath = NullIfBlank(model.CertificatePath),

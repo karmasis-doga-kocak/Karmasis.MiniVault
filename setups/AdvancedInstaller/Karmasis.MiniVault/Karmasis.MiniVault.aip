@@ -979,7 +979,7 @@
     <ROW Dialog_="SqlDlg" Control="TestButton" Type="PushButton" X="276" Y="178" Width="84" Height="17" Attributes="3" Text="Test co&amp;nnection" Order="1800"/>
     <ROW Dialog_="SqlDlg" Control="CsEdit" Type="Edit" X="12" Y="197" Width="348" Height="18" Attributes="65539" Property="MV_CONNECTIONSTRING" Text="{2048}" Order="1900"/>
     <ROW Dialog_="SqlDlg" Control="StatusHint" Type="Text" X="12" Y="217" Width="348" Height="12" Attributes="131075" Text="Next is enabled once Test connection succeeds." Order="2000"/>
-    <ROW Dialog_="SqlDlg" Control="SqlWarn" Type="Text" X="12" Y="215" Width="348" Height="18" Attributes="131075" Text="{\MvWarnFont}Warning: with SQL Server Authentication the login and password are stored in appsettings.json in plain text. Windows Authentication is recommended." Order="2010"/>
+    <ROW Dialog_="SqlDlg" Control="SqlWarn" Type="Text" X="12" Y="215" Width="348" Height="18" Attributes="131075" Text="{\MvWarnFont}Warning: the SQL login and password are stored on this server (DPAPI-protected). Windows Authentication is recommended." Order="2010"/>
     <ROW Dialog_="SqlDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="2100"/>
     <ROW Dialog_="SqlDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="2200" TextLocId="-" Options="1"/>
     <ROW Dialog_="SqlDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="2300" TextLocId="-" Options="1"/>
@@ -1702,7 +1702,7 @@
     <ROW ServiceInstall="minivault.exe" Name="[ServiceName]" DisplayName="[DisplayName]" ServiceType="16" StartType="2" ErrorControl="1" StartName="[MV_SERVICEACCOUNT]" Password="56F8CEBF2CEACC9E7D99BCE09BF6" Component_="minivault.exe" Description="Karmasis MiniVault secret vault server."/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiTextStyleComponent">
-    <ROW TextStyle="MvWarnFont" FaceName="Tahoma" Size="8" Color="255" StyleBits="1"/>
+    <ROW TextStyle="MvWarnFont" FaceName="Tahoma" Size="8" Color="30950" StyleBits="1"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiThemeComponent">
     <ATTRIBUTE name="UsedTheme" value="classic"/>

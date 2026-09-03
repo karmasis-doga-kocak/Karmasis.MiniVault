@@ -21,7 +21,7 @@ declare `#Requires -Version 5.1`). It:
 
 1. Stops the service if it already exists (`robocopy /MIR` cannot replace a running executable), copies
    the publish output into `-InstallDir` (`robocopy /MIR`) and creates `%ProgramData%\MiniVault`.
-2. Writes `%ProgramData%\MiniVault\appsettings.json` with the connection string, `MasterKey:Provider=Dpapi`
+2. Writes `%ProgramData%\MiniVault\appsettings.json` with the connection string DPAPI-protected on this machine (`ConnectionStrings:MiniVaultProtected`; never in clear text), `MasterKey:Provider=Dpapi`
    and the `Tls` section built from `-Url` and the certificate parameters.
 3. Locks `%ProgramData%\MiniVault` down with a protected ACL, granted by **well-known SID** rather than by
    localized group name so the script works on non-English Windows: `*S-1-5-18` (SYSTEM) and

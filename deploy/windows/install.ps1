@@ -414,11 +414,16 @@ if (-not $WhatIfMode) {
 # ---------------------------------------------------------------------------
 # Step 2: write the machine-wide appsettings.json.
 # ---------------------------------------------------------------------------
-Write-Host "Step 2: Write $machineConfigPath (ConnectionStrings:MiniVault, MasterKey:Provider=Dpapi, Tls)."
+Write-Host "Step 2: Write $machineConfigPath (ConnectionStrings:MiniVaultProtected = the connection string DPAPI-protected on this machine, MasterKey:Provider=Dpapi, Tls)."
 if (-not $WhatIfMode) {
-    if ($ConnectionString -match 'Password\s*=') {
-        Write-Warning "The connection string contains a Password= value; it will be stored in plain text in $machineConfigPath. That file is ACL-protected in Step 3, but Windows/Integrated authentication avoids storing a secret at all."
-    }
+    # The connection string is stored DPAPI-protected (LocalMachine scope, the same application entropy the
+    # server's ProtectedConfiguration and the MSI's ConfigProtection use), never in clear text: with a SQL login
+    # the password would otherwise sit in appsettings.json guarded only by the folder ACL. The value is bound to
+    # this machine; a restore onto another host regenerates it (this script, or 'minivault protect').
+    Add-Type -AssemblyName System.Security
+    $entropy = [Text.Encoding]::UTF8.GetBytes('Karmasis.MiniVault.Config.v1')
+    $protectedConnectionString = [Convert]::ToBase64String(
+        [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($ConnectionString), $entropy, 'LocalMachine'))
 
     $certificateSection = if ($hasCertThumbprint) {
         [ordered]@{
@@ -439,7 +444,9 @@ if (-not $WhatIfMode) {
     }
 
     $config = [ordered]@{
-        ConnectionStrings = [ordered]@{ MiniVault = $ConnectionString }
+        # MiniVault = $null on purpose: a JSON null overrides the plain LocalDB default in the binary's own
+        # appsettings.json, so only the protected value is left for the server to resolve.
+        ConnectionStrings = [ordered]@{ MiniVault = $null; MiniVaultProtected = $protectedConnectionString }
         MasterKey         = [ordered]@{ Provider = 'Dpapi' }
         Tls               = [ordered]@{
             Url         = $Url

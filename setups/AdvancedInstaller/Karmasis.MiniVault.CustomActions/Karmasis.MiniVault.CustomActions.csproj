@@ -34,6 +34,8 @@
     <!-- MessageBox.Show for ShowUiMessage: the installer's own modal message boxes, parented to the
          wizard window (the pattern Karmasis.InfraskopeServer's setup uses). -->
     <Reference Include="System.Windows.Forms" />
+    <!-- ProtectedData (DPAPI) for ConfigProtection: the connection string is written to appsettings.json protected. -->
+    <Reference Include="System.Security" />
   </ItemGroup>
 
   <ItemGroup>
