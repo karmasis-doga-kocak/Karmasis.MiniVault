@@ -574,7 +574,15 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
   `AI_*_SETUPEXEPATH` action'ları, `MINIVA~1.EXE|minivault.exe` dosya adı) giderildi ve her biri
   için script'e kontrol eklendi. İlk MSI denemesinde Welcome sayfasının Next'i çalışmadı: tema
   fragment'ları standart sayfaları verir ama sayfalar arası `NewDialog`/`EndDialog` event'lerini
-  vermez; Collector `.aip`'indeki açık satırlar eklendi (lisans sayfası yok, Welcome → Folder). Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  vermez; Collector `.aip`'indeki açık satırlar eklendi (lisans sayfası yok, Welcome → Folder).
+  `.aip` designer'da bir kez kaydedildi (24.0 formatı, yorumlar silindi, publish çıktısı açık dosya
+  satırlarına açıldı); designer bellekteki kopyayı yazdığı için diskteki sonraki değişiklikleri ezdi,
+  navigasyon satırları yeniden eklendi. Kural: designer'ı kapatmadan pull/düzenleme yapma, kaydettikten
+  sonra `verify-aip.ps1 -Build` koştur.
+- `TestSqlConnection`: SQL 4060 ("Cannot open database") ilk kurulumda normaldir (`init` veritabanını
+  yaratır). Action `master`'a bağlanıp `DB_ID` ve CREATE DATABASE yetkisine bakar: DB yok + yetki var →
+  test geçer, `MV_SQL_NOTE` ile "kurulum oluşturacak" notu; DB var ama açılamıyor ya da yetki yok →
+  neden belirtilerek düşer. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
   tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
   `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
   doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);

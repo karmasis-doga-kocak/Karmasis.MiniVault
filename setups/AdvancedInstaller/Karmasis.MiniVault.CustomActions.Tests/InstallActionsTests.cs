@@ -405,6 +405,35 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             session.GetProperty(InstallActions.SqlErrorProperty).ShouldNotBeNullOrWhiteSpace();
         }
 
+        // The next two need SQL Server LocalDB, like the server's integration tests. The test user is
+        // sysadmin on its own LocalDB instance, so a missing database is the "init will create it" case.
+        [Fact]
+        public void TestSqlConnection_WhenTheDatabaseDoesNotExistYet_PassesWithANote()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty("MV_CONNECTIONSTRING",
+                "Server=(localdb)\\MSSQLLocalDB;Database=MiniVaultSetupTest_DoesNotExist_" + Guid.NewGuid().ToString("N") + ";Integrated Security=true");
+
+            InstallActions.TestSqlConnection(session).ShouldBe((int)ActionResult.Success);
+
+            session.GetProperty(InstallActions.SqlOkProperty).ShouldBe("1");
+            session.GetProperty(InstallActions.SqlErrorProperty).ShouldBeEmpty();
+            session.GetProperty(InstallActions.SqlNoteProperty).ShouldContain("does not exist yet");
+        }
+
+        [Fact]
+        public void TestSqlConnection_WhenTheDatabaseExists_PassesWithoutANote()
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty("MV_CONNECTIONSTRING", "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true");
+
+            InstallActions.TestSqlConnection(session).ShouldBe((int)ActionResult.Success);
+
+            session.GetProperty(InstallActions.SqlOkProperty).ShouldBe("1");
+            session.GetProperty(InstallActions.SqlErrorProperty).ShouldBeEmpty();
+            session.GetProperty(InstallActions.SqlNoteProperty).ShouldBeEmpty();
+        }
+
         // -------------------------------------------------------------------
         // Helpers
         // -------------------------------------------------------------------

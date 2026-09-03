@@ -35,10 +35,18 @@ connection string, every password, the PFX path/thumbprint, the UI-only check bo
 Installer still builds the package (exit code 0). They are noise here, and `verify-aip.ps1 -Build`
 prints them as `[info]`.
 
-Expect the first designer session to normalize the file: Advanced Installer converts it to the 24.0
-format (a `*.back(22.8).aip` backup appears next to it, git-ignored), materializes the standard
-dialog control rows out of the fragments, and regenerates component GUIDs for files it discovers
-through the synchronized folder. That is expected — commit the rewritten file.
+The tracked `.aip` is now the file as the Advanced Installer 24.0 designer saved it: converted to
+the 24.0 format, XML comments stripped, and the publish output materialized into explicit
+`MsiFilesComponent` / `MsiCompsComponent` rows with generated GUIDs next to the
+`SynchronizedFolderComponent` (that is why it grew from 60 KB to 270 KB). The narrative that used to
+live in the comments is in this README. Two things to know when working in the designer:
+
+- **Saving writes what the designer loaded.** The designer keeps the project in memory; if the file
+  changes on disk while it is open (a `git pull`, an edit here) and you then save, those changes are
+  gone. Close the project before pulling, and run `verify-aip.ps1 -Build` after saving — it fails if
+  the wizard navigation or any of the checks above went missing, which is exactly what happened
+  the first time.
+- The designer creates `*.back(<version>).aip` next to the project; they are git-ignored.
 
 ## Build order
 
@@ -141,7 +149,12 @@ succeeds offline with the repo's own `nuget.config`.
 
 `TestSqlConnection` (immediate, unsequenced) is there for a "Test connection" button: it opens the
 connection string in `MV_CONNECTIONSTRING` with a 5-second timeout and sets `MV_SQL_OK` to `1` or
-`0` plus `MV_SQL_ERROR`. It never fails an installation. The *Test connection* button on `SqlDlg`
+`0` plus `MV_SQL_ERROR` / `MV_SQL_NOTE`. A database that does not exist yet is the normal
+first-install case (`minivault init` creates it), so SQL error 4060 ("Cannot open database ...
+requested by the login") is followed up against `master`: the test passes with a note when the
+database is absent and the login may create databases (sysadmin, dbcreator or CREATE ANY DATABASE),
+and fails with a message saying which when the database exists but the login cannot open it, or when
+the login cannot create it. It never fails an installation. The *Test connection* button on `SqlDlg`
 runs it (see "Dialogs").
 
 There is no .NET Framework launch condition: the server publishes self-contained, so nothing has to
@@ -294,7 +307,7 @@ install never shows them and takes the same `MV_*` properties from the command l
 
 | Page | Inputs | Next-button checks |
 | --- | --- | --- |
-| `SqlDlg` | `MV_CONNECTIONSTRING` (multi-line edit); *Test connection* runs `TestSqlConnection` and shows "Connection succeeded." or `[MV_SQL_ERROR]`. | connection string not empty |
+| `SqlDlg` | `MV_CONNECTIONSTRING` (multi-line edit); *Test connection* runs `TestSqlConnection` and shows "Connection succeeded." (plus `[MV_SQL_NOTE]` when the database does not exist yet and the install will create it) or `[MV_SQL_ERROR]`. | connection string not empty |
 | `ServiceDlg` | `MV_SERVICEACCOUNT` (default `LocalSystem`), `MV_SERVICEACCOUNT_PASSWORD`; check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | empty account → `LocalSystem`; with the box ticked the password is required and must match; unticked clears both |
 | `TlsDlg` | `MV_URL`, `MV_CERT_THUMBPRINT`; check box *Use a PFX file* → `MV_CERT_PATH`, `MV_CERT_PASSWORD`. | URL not empty; exactly one certificate source (the other mode's properties are cleared on Next, so `MachineConfigWriter` never sees both) |
 | `RecoveryDlg` | check box *Split into Shamir shares* bound to `MV_RECOVERY` (ticked = `shamir`, unticked = cleared = single), `MV_SHARES`, `MV_THRESHOLD` (integer edits); acknowledgement check box `MV_RECOVERY_ACK`. | acknowledgement ticked; for shamir, shares and threshold each within 2..255 |

@@ -129,7 +129,10 @@ msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log `
    `MV_SERVICEACCOUNT_PASSWORD` when that account needs one) **and starts it**. A successful
    installation therefore leaves a running service, not just a registered one.
 6. (Not sequenced into the install; run by the *Test connection* button on the SQL page.) Tests the
-   connection string in `MV_CONNECTIONSTRING` and reports back via `MV_SQL_OK`/`MV_SQL_ERROR`.
+   connection string in `MV_CONNECTIONSTRING` and reports back via `MV_SQL_OK`/`MV_SQL_ERROR`. A
+   database that does not exist yet passes with a note — `init` creates it — as long as the login
+   may create databases; "the database exists but this login cannot open it" and "the login cannot
+   create databases" are reported as failures with those words.
 
 The recovery material is written to `%ProgramData%\MiniVault\recovery-<timestamp>.txt` (a deferred
 custom action cannot show it in the UI). **Open that file, copy the recovery key or shares to a safe

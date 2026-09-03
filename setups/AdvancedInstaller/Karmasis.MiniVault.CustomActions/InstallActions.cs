@@ -337,10 +337,19 @@ namespace Karmasis.MiniVault.CustomActions
         // TestSqlConnection (immediate)
         // -------------------------------------------------------------------
 
+        internal const string SqlNoteProperty = "MV_SQL_NOTE";
+
+        /// <summary>SQL Server error 4060: the login is fine but "Cannot open database ... requested by the login".</summary>
+        private const int SqlCannotOpenDatabase = 4060;
+
         /// <summary>
         /// Opens the connection string in MV_CONNECTIONSTRING with a 5 second timeout and reports the
-        /// outcome in MV_SQL_OK (1 or 0) and MV_SQL_ERROR. Immediate, so it can back a "Test
+        /// outcome in MV_SQL_OK (1 or 0), MV_SQL_ERROR and MV_SQL_NOTE. Immediate, so it can back a "Test
         /// connection" button; it never fails the installation.
+        /// A database that does not exist yet is the normal first-install case - 'minivault init' creates
+        /// it - so error 4060 is followed up against master: if the database really is absent and the login
+        /// may create databases, the test passes with a note; if it exists but the login cannot open it, or
+        /// the login cannot create it, the test fails with a message saying which.
         /// </summary>
         public static int TestSqlConnection(string sessionHandle)
         {
@@ -355,8 +364,7 @@ namespace Karmasis.MiniVault.CustomActions
 
                 if (string.IsNullOrEmpty(connectionString) || connectionString.Trim().Length == 0)
                 {
-                    session.SetProperty(SqlOkProperty, "0");
-                    session.SetProperty(SqlErrorProperty, "No connection string was entered.");
+                    ReportSql(session, false, "No connection string was entered.", null);
                     return (int)ActionResult.Success;
                 }
 
@@ -365,21 +373,76 @@ namespace Karmasis.MiniVault.CustomActions
                     ConnectTimeout = SqlConnectTimeoutSeconds
                 };
 
-                using (var connection = new SqlConnection(builder.ConnectionString))
+                try
                 {
-                    connection.Open();
-                }
+                    using (var connection = new SqlConnection(builder.ConnectionString))
+                    {
+                        connection.Open();
+                    }
 
-                session.SetProperty(SqlOkProperty, "1");
-                session.SetProperty(SqlErrorProperty, string.Empty);
-                return (int)ActionResult.Success;
+                    ReportSql(session, true, null, null);
+                    return (int)ActionResult.Success;
+                }
+                catch (SqlException ex) when (ex.Number == SqlCannotOpenDatabase && !string.IsNullOrEmpty(builder.InitialCatalog))
+                {
+                    var databaseName = builder.InitialCatalog;
+                    var master = new SqlConnectionStringBuilder(builder.ConnectionString) { InitialCatalog = "master" };
+                    using (var connection = new SqlConnection(master.ConnectionString))
+                    {
+                        connection.Open();
+                        bool exists;
+                        bool canCreate;
+                        using (var command = connection.CreateCommand())
+                        {
+                            command.CommandText = "SELECT CASE WHEN DB_ID(@name) IS NULL THEN 0 ELSE 1 END, "
+                                + "CASE WHEN IS_SRVROLEMEMBER('sysadmin') = 1 OR IS_SRVROLEMEMBER('dbcreator') = 1 "
+                                + "OR HAS_PERMS_BY_NAME(NULL, NULL, 'CREATE ANY DATABASE') = 1 THEN 1 ELSE 0 END";
+                            command.Parameters.AddWithValue("@name", databaseName);
+                            using (var reader = command.ExecuteReader())
+                            {
+                                reader.Read();
+                                exists = reader.GetInt32(0) == 1;
+                                canCreate = reader.GetInt32(1) == 1;
+                            }
+                        }
+
+                        if (exists)
+                        {
+                            ReportSql(session, false, string.Format(CultureInfo.InvariantCulture,
+                                "The server accepted the login, but the database '{0}' exists and this login cannot open it. "
+                                + "Grant the login access to the database (db_owner for the account that runs the installation), or use another login.",
+                                databaseName), null);
+                        }
+                        else if (!canCreate)
+                        {
+                            ReportSql(session, false, string.Format(CultureInfo.InvariantCulture,
+                                "The server accepted the login, but the database '{0}' does not exist and this login may not create databases. "
+                                + "Create the database first, or give the login the dbcreator role for the installation.",
+                                databaseName), null);
+                        }
+                        else
+                        {
+                            ReportSql(session, true, null, string.Format(CultureInfo.InvariantCulture,
+                                "The database '{0}' does not exist yet; the installation creates it ('minivault init').",
+                                databaseName));
+                        }
+                    }
+
+                    return (int)ActionResult.Success;
+                }
             }
             catch (Exception ex)
             {
-                session.SetProperty(SqlOkProperty, "0");
-                session.SetProperty(SqlErrorProperty, ex.Message);
+                ReportSql(session, false, ex.Message, null);
                 return (int)ActionResult.Success;
             }
+        }
+
+        private static void ReportSql(IMsiSession session, bool ok, string error, string note)
+        {
+            session.SetProperty(SqlOkProperty, ok ? "1" : "0");
+            session.SetProperty(SqlErrorProperty, error ?? string.Empty);
+            session.SetProperty(SqlNoteProperty, note ?? string.Empty);
         }
 
         // -------------------------------------------------------------------
