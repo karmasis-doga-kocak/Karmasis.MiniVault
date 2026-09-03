@@ -329,8 +329,8 @@ install never shows them and takes the same `MV_*` properties from the command l
 On the SQL page *Next* is enabled only after a successful *Test connection* (`MV_SQL_OK = "1"`, a
 `ControlCondition` re-applied by the page refresh); changing a radio button or check box resets
 `MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
-edited after the test is caught too. While SQL Server Authentication is selected the page shows an
-orange, bold warning line (`TextStyle` `MvWarnFont`, `MsiTextStyleComponent`) that the login and
+edited after the test is caught too. While SQL Server Authentication is selected the page shows a
+two-line amber warning (`TextStyle` `MvWarnFont`, regular weight, `MsiTextStyleComponent`) that the login and
 password are stored on the server (DPAPI-protected, see below) and Windows Authentication is
 recommended; with Windows Authentication the same line holds the one-line hint about the Next lock.
 The test result (`MV_SQL_RESULT`) is shown in a message box with an information or warning icon.
