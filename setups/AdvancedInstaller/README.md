@@ -18,7 +18,10 @@ The `.aip` was authored as XML (against the schema of
 Advanced Installer 22.8) and **builds into an MSI with Advanced Installer 24.0's command line**
 (`verify-aip.ps1 -Build`, see "Build order"). The loader errors that surfaced on the way — an empty
 `Property.Value`, the `MsiLockPermComponent` schema, the missing `AI_*_SETUPEXEPATH` actions, the
-short|long `FileName` — are fixed and each has a check in `verify-aip.ps1`. The built MSI's
+short|long `FileName` — are fixed and each has a check in `verify-aip.ps1`. So is the first thing a
+test run of the MSI showed: the theme fragments supply the standard dialogs but none of their
+page-to-page events, so `WelcomeDlg`'s Next did nothing until the Collector's explicit
+`NewDialog`/`EndDialog` rows were added (`verify-aip.ps1` now requires the whole chain). The built MSI's
 `Dialog`, `Control`, `ControlEvent`, `ControlCondition` and `CheckBox` tables were inspected with the
 Windows Installer API: the four configuration pages, their navigation, the check-box refresh
 (`[AiRefreshDlg]` becomes a `NewDialog` to a generated `<Dialog>_1` clone and back) and the

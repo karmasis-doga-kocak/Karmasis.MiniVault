@@ -498,7 +498,8 @@ Write-Section '6. Configuration dialogs'
 
 # Dialogs the theme fragments provide (not declared in this file) that our rows may reference.
 $fragmentDialogs = @('WelcomeDlg', 'LicenseAgreementDlg', 'FolderDlg', 'VerifyReadyDlg', 'ExitDialog', 'CancelDlg',
-    'ProgressDlg', 'MaintenanceWelcomeDlg', 'MaintenanceTypeDlg', 'VerifyRemoveDlg', 'VerifyRepairDlg', 'CustomizeDlg')
+    'ProgressDlg', 'MaintenanceWelcomeDlg', 'MaintenanceTypeDlg', 'VerifyRemoveDlg', 'VerifyRepairDlg', 'CustomizeDlg',
+    'PatchWelcomeDlg', 'ResumeDlg', 'FatalError', 'UserExit', 'BrowseDlg', 'DiskCostDlg')
 
 $ownDialogs = @()
 if ($components.ContainsKey('caphyon.advinst.msicomp.MsiDialogComponent')) {
@@ -596,15 +597,29 @@ foreach ($row in $eventRows) {
 Write-Ok "$($eventRows.Count) control events resolve to known dialogs, controls, actions and properties (unless reported above)"
 
 # Each of our pages must be reachable and must lead on: FolderDlg -> SqlDlg -> ... -> VerifyReadyDlg, and back.
+# The theme fragments provide the standard dialogs but not their page-to-page events: a project that
+# lacks them builds fine and then WelcomeDlg's Next button does nothing. So the whole first-install
+# chain is required here, plus the maintenance/patch/resume ways out.
 $navigation = @(
+    @('WelcomeDlg', 'FolderDlg'), @('FolderDlg', 'WelcomeDlg'),
     @('FolderDlg', 'SqlDlg'), @('SqlDlg', 'ServiceDlg'), @('ServiceDlg', 'TlsDlg'), @('TlsDlg', 'RecoveryDlg'), @('RecoveryDlg', 'VerifyReadyDlg'),
-    @('VerifyReadyDlg', 'RecoveryDlg'), @('RecoveryDlg', 'TlsDlg'), @('TlsDlg', 'ServiceDlg'), @('ServiceDlg', 'SqlDlg'), @('SqlDlg', 'FolderDlg')
+    @('VerifyReadyDlg', 'RecoveryDlg'), @('RecoveryDlg', 'TlsDlg'), @('TlsDlg', 'ServiceDlg'), @('ServiceDlg', 'SqlDlg'), @('SqlDlg', 'FolderDlg'),
+    @('FolderDlg', 'VerifyReadyDlg'), @('VerifyReadyDlg', 'FolderDlg'),
+    @('MaintenanceWelcomeDlg', 'MaintenanceTypeDlg'), @('MaintenanceTypeDlg', 'CustomizeDlg'), @('MaintenanceTypeDlg', 'VerifyRepairDlg'),
+    @('MaintenanceTypeDlg', 'VerifyRemoveDlg'), @('CustomizeDlg', 'VerifyReadyDlg'), @('PatchWelcomeDlg', 'VerifyReadyDlg')
 )
 foreach ($hop in $navigation) {
     if (@($eventRows | Where-Object { $_.Dialog_ -eq $hop[0] -and $_.Event -eq 'NewDialog' -and $_.Argument -eq $hop[1] }).Count -ge 1) {
         Write-Ok "navigation: $($hop[0]) -> $($hop[1])"
     } else {
         Write-Fail "navigation missing: $($hop[0]) -> $($hop[1])"
+    }
+}
+foreach ($commit in @(@('VerifyReadyDlg', 'Install'), @('VerifyRepairDlg', 'Repair'), @('VerifyRemoveDlg', 'Remove'), @('ResumeDlg', 'Install'))) {
+    if (@($eventRows | Where-Object { $_.Dialog_ -eq $commit[0] -and $_.Control_ -eq $commit[1] -and $_.Event -eq 'EndDialog' -and $_.Argument -eq 'Return' }).Count -ge 1) {
+        Write-Ok "commit: $($commit[0]).$($commit[1]) -> EndDialog Return"
+    } else {
+        Write-Fail "commit missing: $($commit[0]).$($commit[1]) has no EndDialog Return (the wizard could never start the install)"
     }
 }
 

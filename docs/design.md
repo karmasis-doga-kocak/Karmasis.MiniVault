@@ -572,7 +572,9 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
 - `.aip`, Advanced Installer 24.0 komut satırıyla MSI'a derleniyor (`verify-aip.ps1 -Build`);
   yükleyici hataları (boş `Property.Value`, `MsiLockPermComponent` şeması, eksik
   `AI_*_SETUPEXEPATH` action'ları, `MINIVA~1.EXE|minivault.exe` dosya adı) giderildi ve her biri
-  için script'e kontrol eklendi. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  için script'e kontrol eklendi. İlk MSI denemesinde Welcome sayfasının Next'i çalışmadı: tema
+  fragment'ları standart sayfaları verir ama sayfalar arası `NewDialog`/`EndDialog` event'lerini
+  vermez; Collector `.aip`'indeki açık satırlar eklendi (lisans sayfası yok, Welcome → Folder). Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
   tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
   `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
   doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);
