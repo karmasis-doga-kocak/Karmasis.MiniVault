@@ -525,7 +525,8 @@ if ($components.ContainsKey('caphyon.advinst.msicomp.MsiCheckBoxComponent')) {
     $checkBoxRows = @($components['caphyon.advinst.msicomp.MsiCheckBoxComponent'].ROW)
 }
 
-foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg', 'MvErrorDlg')) {
+$messageDialogs = @('MvSqlMsgDlg', 'MvServiceMsgDlg', 'MvTlsMsgDlg', 'MvRecoveryMsgDlg')
+foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg') + $messageDialogs) {
     if ($ownDialogs -contains $dialog) { Write-Ok "dialog declared: $dialog" } else { Write-Fail "dialog not declared: $dialog" }
 }
 
@@ -541,7 +542,7 @@ foreach ($row in @($components['caphyon.advinst.msicomp.MsiDialogComponent'].ROW
             Write-Fail "dialog '$($row.Dialog)' names control '$required' as default/cancel but has no such control"
         }
     }
-    if ($row.Dialog -ne 'MvErrorDlg') {
+    if ($messageDialogs -notcontains $row.Dialog) {
         foreach ($required in @('Back', 'Next', 'Cancel', 'Title', 'BannerBitmap', 'BannerLine', 'BottomLine')) {
             if (-not (Test-ControlExists $row.Dialog $required)) {
                 Write-Fail "dialog '$($row.Dialog)' has no '$required' control"
@@ -641,8 +642,12 @@ foreach ($commit in @(@('VerifyReadyDlg', 'Install'), @('VerifyRepairDlg', 'Repa
 # validation events actually gate it.
 foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg')) {
     $next = @($eventRows | Where-Object { $_.Dialog_ -eq $dialog -and $_.Control_ -eq 'Next' -and $_.Event -eq 'NewDialog' })
-    if ($next.Count -ne 1 -or $next[0].Condition -eq '1' -or [string]::IsNullOrWhiteSpace($next[0].Condition)) {
-        Write-Fail "$dialog.Next must have exactly one conditional NewDialog"
+    $forward = @($next | Where-Object { $messageDialogs -notcontains $_.Argument })
+    if ($forward.Count -ne 1 -or $forward[0].Condition -eq '1' -or [string]::IsNullOrWhiteSpace($forward[0].Condition)) {
+        Write-Fail "$dialog.Next must have exactly one conditional NewDialog to the next page (message pages aside)"
+    }
+    foreach ($row in $next) {
+        if ($row.Condition -eq '1' -or [string]::IsNullOrWhiteSpace($row.Condition)) { Write-Fail "$dialog.Next has an unconditional NewDialog to $($row.Argument)" }
     }
 }
 
@@ -672,10 +677,27 @@ if ($testSequence -eq 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER
 } else {
     Write-Fail "SqlDlg.TestButton actions are '$testSequence'; expected 'AI_DATA_SETTER_5 > BuildConnectionString > AI_DATA_SETTER_2 > TestSqlConnection'"
 }
-if (@($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'SpawnDialog' -and $_.Argument -eq 'MvErrorDlg' }).Count -eq 1) {
-    Write-Ok 'SqlDlg.TestButton shows MV_SQL_RESULT in MvErrorDlg'
+# Results and validation messages are shown by moving to a small message page and back (NewDialog both
+# ways). SpawnDialog from a control that also refreshes the page is silently dropped by Advanced
+# Installer's UI engine (seen in a verbose log), so no page may rely on it for anything but CancelDlg.
+if (@($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' -and $_.Event -eq 'NewDialog' -and $_.Argument -eq 'MvSqlMsgDlg' }).Count -eq 1) {
+    Write-Ok 'SqlDlg.TestButton shows MV_SQL_RESULT on MvSqlMsgDlg'
 } else {
-    Write-Fail 'SqlDlg.TestButton does not spawn MvErrorDlg with the test result'
+    Write-Fail 'SqlDlg.TestButton does not open MvSqlMsgDlg with the test result'
+}
+foreach ($spawn in @($eventRows | Where-Object { $_.Event -eq 'SpawnDialog' -and $_.Argument -ne 'CancelDlg' -and ($ownDialogs -contains $_.Dialog_) })) {
+    Write-Fail "$($spawn.Dialog_).$($spawn.Control_) spawns '$($spawn.Argument)': SpawnDialog is unreliable here, use NewDialog to a message page"
+}
+$messageReturns = @{ 'MvSqlMsgDlg' = 'SqlDlg'; 'MvServiceMsgDlg' = 'ServiceDlg'; 'MvTlsMsgDlg' = 'TlsDlg'; 'MvRecoveryMsgDlg' = 'RecoveryDlg' }
+foreach ($message in $messageReturns.Keys) {
+    if (@($eventRows | Where-Object { $_.Dialog_ -eq $message -and $_.Control_ -eq 'OK' -and $_.Event -eq 'NewDialog' -and $_.Argument -eq $messageReturns[$message] }).Count -eq 1) {
+        Write-Ok "$message.OK returns to $($messageReturns[$message])"
+    } else {
+        Write-Fail "$message.OK does not return to $($messageReturns[$message])"
+    }
+    if (-not (Test-ControlExists $message 'Message') -or -not (Test-ControlExists $message 'OK')) {
+        Write-Fail "$message lacks its Message text or OK button"
+    }
 }
 
 # Control conditions reference existing controls.

@@ -331,20 +331,25 @@ On the SQL page *Next* is enabled only after a successful *Test connection* (`MV
 `MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
 edited after the test is caught too. Choosing SQL Server Authentication pops up a warning that
 Windows Authentication is recommended (the login and password end up in `appsettings.json`). The
-last test result stays visible on the page (`MV_SQL_RESULT`) as well as in the message box.
+test result (`MV_SQL_RESULT`) is shown on the message page with an info or exclamation icon; the
+page itself only carries a one-line hint about the Next lock.
 
-Two Windows Installer rules learned the hard way, both checked by a test install: body text must
-not be **Transparent** (attribute `0x10000`) — a transparent `Text` overlapping the repaint region
-of an edit makes radio buttons and labels vanish while typing (the theme only uses it over the
-banner bitmap; our body texts are `3` / `131075`); and a dialog whose `Control_First` is a `Text`
-is never created by `SpawnDialog` — Advanced Installer derives `Control_First` from the lowest
-`Order`, so the OK button of `MvErrorDlg` has the lowest order.
+Two Windows Installer rules learned from verbose logs of test runs: body text must not be
+**Transparent** (attribute `0x10000`) — a transparent `Text` overlapping the repaint region of an
+edit makes radio buttons and labels vanish while typing (the theme only uses it over the banner
+bitmap; our body texts are `3` / `131075`); and **`SpawnDialog` is silently dropped** by Advanced
+Installer's UI engine when the same control also publishes `[AiRefreshDlg]`/`NewDialog` (the log
+shows the property being set and then straight on to the next dialog, never a "Dialog created" for
+the spawned one). Messages therefore use `NewDialog` both ways instead.
 
-A failed check sets `MV_UI_ERROR` and spawns `MvErrorDlg` (a small OK box) instead of moving on;
-the `NewDialog` event carries the complementary condition. This deliberately avoids depending on
-control conditions being re-evaluated while the user types: MSI evaluates `ControlCondition` rows
-when a page is built, so the pages also raise `[AiRefreshDlg]=1` from their check boxes and the
-test button to have Advanced Installer rebuild the page and apply the Enable/Disable rules.
+A failed check, and the connection-test result, set `MV_UI_ERROR` and move to a small message page
+(`MvSqlMsgDlg`, `MvServiceMsgDlg`, `MvTlsMsgDlg`, `MvRecoveryMsgDlg`: an icon, the text, OK) whose OK
+button comes back with `NewDialog` to the page it belongs to; the forward `NewDialog` carries the
+complementary condition. Coming back re-creates the page, which is also how the Next lock and the
+Enable/Disable rules get re-applied — MSI evaluates `ControlCondition` rows only when a page is
+built, so the check boxes and radio groups raise `[AiRefreshDlg]=1` (compiled by Advanced Installer
+into a `NewDialog` to a generated `<Dialog>_1` clone) for the same effect. `MvSqlMsgDlg` shows the
+info icon or the exclamation icon according to `MV_UI_KIND` (`info` after a successful test).
 
 `threshold <= shares` is the one rule the dialog cannot express (MSI conditions compare two
 properties as strings), so `ValidateProperties` — immediate, before `InstallInitialize` — checks the
