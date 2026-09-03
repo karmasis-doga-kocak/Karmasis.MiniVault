@@ -590,7 +590,13 @@ Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-product
   asla üretilmez); `BuildConnectionStringSilent` execute sequence'ta `ValidateProperties`'ten önce
   koşar, böylece silent kurulum parçaları (`MV_SQL_*`) da verebilir. Servis sayfasında hesap seçimi
   radio grubu (Local System / Network Service / This account, `MV_SERVICEACCOUNT_KIND`). Test sonucu
-  `MV_SQL_RESULT` ile mesaj kutusunda gösterilir. Custom action testleri: 74. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
+  `MV_SQL_RESULT` ile mesaj kutusunda gösterilir. Custom action testleri: 74.
+- İlk GUI denemesinin bulguları: (1) Transparent (0x10000) gövde metinleri yazarken radio/etiketleri
+  siliyor → banner dışı tüm metinler opak (3 / 131075). (2) `Control_First`'ü Text olan dialog
+  `SpawnDialog` ile hiç oluşturulmuyor; AI bunu en düşük `Order`'dan türettiği için `MvErrorDlg`'de
+  OK butonu en düşük order. (3) SQL sayfasında Next yalnızca test başarılıysa etkin (`MV_SQL_OK`),
+  radio/checkbox değişimi sıfırlar, Next testi yeniden koşturur; SQL Server Authentication seçimi
+  uyarı kutusu açar; son sonuç sayfada da görünür. Derlenen MSI'ın Dialog/Control/ControlEvent/ControlCondition/CheckBox
   tabloları Windows Installer API ile incelendi: sayfalar, navigasyon, `[AiRefreshDlg]` (AI bunu
   `<Dialog>_1` klonuna `NewDialog` olarak derliyor) ve `FolderDlg`/`VerifyReadyDlg` override'ları
   doğrulandı. Derlemede 20 `AI_ICE07` satırı çıkar (varsayılanı olmayan property'lere bağlı alanlar);

@@ -917,8 +917,8 @@
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiControlComponent">
     <ROW Dialog_="ExitDialog" Control="MvRecoveryNote" Type="Text" X="135" Y="120" Width="220" Height="100" Attributes="196611" Text="Before you close this window: open %ProgramData%\MiniVault (Administrators only), copy the contents of recovery-&lt;timestamp&gt;.txt to a safe offline location, then delete the file. It cannot be shown again. Also grant the service account db_datareader and db_datawriter on the MiniVault database if you have not yet (see docs/operations.md)." Order="1300"/>
-    <ROW Dialog_="MvErrorDlg" Control="Message" Type="Text" X="15" Y="15" Width="270" Height="58" Attributes="196611" Text="[MV_UI_ERROR]" Order="100"/>
-    <ROW Dialog_="MvErrorDlg" Control="OK" Type="PushButton" X="122" Y="85" Width="56" Height="17" Attributes="3" Text="[ButtonText_OK]" Order="200" TextLocId="-"/>
+    <ROW Dialog_="MvErrorDlg" Control="Message" Type="Text" X="15" Y="15" Width="270" Height="58" Attributes="131075" Text="[MV_UI_ERROR]" Order="200"/>
+    <ROW Dialog_="MvErrorDlg" Control="OK" Type="PushButton" X="122" Y="85" Width="56" Height="17" Attributes="3" Text="[ButtonText_OK]" Order="100" TextLocId="-"/>
     <ROW Dialog_="RecoveryDlg" Control="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Attributes="1048577" Text="[BannerBitmap]" Order="100"/>
     <ROW Dialog_="RecoveryDlg" Control="Title" Type="Text" X="12" Y="6" Width="300" Height="15" Attributes="196611" Text="Recovery material" TextStyle="[DlgTitleFont]" Order="200"/>
     <ROW Dialog_="RecoveryDlg" Control="Description" Type="Text" X="12" Y="21" Width="340" Height="20" Attributes="196611" Text="If the master key is ever lost, the recovery material is the only way to restore the vault." Order="300"/>
@@ -928,8 +928,8 @@
     <ROW Dialog_="RecoveryDlg" Control="SharesEdit" Type="Edit" X="135" Y="73" Width="50" Height="16" Attributes="19" Property="MV_SHARES" Text="{3}" Order="700"/>
     <ROW Dialog_="RecoveryDlg" Control="ThresholdLabel" Type="Text" X="24" Y="95" Width="108" Height="10" Attributes="3" Text="Shares needed to &amp;recover:" Order="800"/>
     <ROW Dialog_="RecoveryDlg" Control="ThresholdEdit" Type="Edit" X="135" Y="93" Width="50" Height="16" Attributes="19" Property="MV_THRESHOLD" Text="{3}" Order="900"/>
-    <ROW Dialog_="RecoveryDlg" Control="ShamirNote" Type="Text" X="12" Y="112" Width="348" Height="22" Attributes="196611" Text="Any &apos;needed&apos; of the shares restore the vault (2 &lt;= needed &lt;= shares &lt;= 255). Recommended: 3 shares, 2 needed, each stored by a different person. Without this option a single recovery key is produced." Order="1000"/>
-    <ROW Dialog_="RecoveryDlg" Control="Warning" Type="Text" X="12" Y="140" Width="348" Height="52" Attributes="196611" Text="IMPORTANT: the recovery material is written ONCE, during installation, to %ProgramData%\MiniVault\recovery-&lt;timestamp&gt;.txt (readable by Administrators only). It cannot be shown again. After setup, open that file, store its contents offline in separate places, then delete the file." Order="1100"/>
+    <ROW Dialog_="RecoveryDlg" Control="ShamirNote" Type="Text" X="12" Y="112" Width="348" Height="22" Attributes="131075" Text="Any &apos;needed&apos; of the shares restore the vault (2 &lt;= needed &lt;= shares &lt;= 255). Recommended: 3 shares, 2 needed, each stored by a different person. Without this option a single recovery key is produced." Order="1000"/>
+    <ROW Dialog_="RecoveryDlg" Control="Warning" Type="Text" X="12" Y="140" Width="348" Height="52" Attributes="131075" Text="IMPORTANT: the recovery material is written ONCE, during installation, to %ProgramData%\MiniVault\recovery-&lt;timestamp&gt;.txt (readable by Administrators only). It cannot be shown again. After setup, open that file, store its contents offline in separate places, then delete the file." Order="1100"/>
     <ROW Dialog_="RecoveryDlg" Control="AckCheck" Type="CheckBox" X="12" Y="196" Width="348" Height="24" Attributes="3" Property="MV_RECOVERY_ACK" Text="&amp;I understand that I must copy the recovery file to a safe offline location and delete it after installation" Order="1200"/>
     <ROW Dialog_="RecoveryDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="1300"/>
     <ROW Dialog_="RecoveryDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="1400" TextLocId="-" Options="1"/>
@@ -941,26 +941,26 @@
     <ROW Dialog_="TlsDlg" Control="BannerLine" Type="Line" X="0" Y="44" Width="372" Height="0" Attributes="1" Order="400"/>
     <ROW Dialog_="TlsDlg" Control="UrlLabel" Type="Text" X="12" Y="57" Width="120" Height="10" Attributes="3" Text="&amp;Listen URL:" Order="500"/>
     <ROW Dialog_="TlsDlg" Control="UrlEdit" Type="Edit" X="135" Y="55" Width="225" Height="16" Attributes="3" Property="MV_URL" Text="{256}" Order="600"/>
-    <ROW Dialog_="TlsDlg" Control="UrlNote" Type="Text" X="12" Y="73" Width="348" Height="12" Attributes="196611" Text="Must start with https:// and use an IP literal (0.0.0.0, ::, localhost or an address), not a DNS name." Order="700"/>
+    <ROW Dialog_="TlsDlg" Control="UrlNote" Type="Text" X="12" Y="73" Width="348" Height="12" Attributes="131075" Text="Must start with https:// and use an IP literal (0.0.0.0, ::, localhost or an address), not a DNS name." Order="700"/>
     <ROW Dialog_="TlsDlg" Control="ThumbprintLabel" Type="Text" X="12" Y="91" Width="120" Height="10" Attributes="3" Text="Certificate &amp;thumbprint:" Order="800"/>
     <ROW Dialog_="TlsDlg" Control="ThumbprintEdit" Type="Edit" X="135" Y="89" Width="225" Height="16" Attributes="3" Property="MV_CERT_THUMBPRINT" Text="{64}" Order="900"/>
-    <ROW Dialog_="TlsDlg" Control="ThumbprintNote" Type="Text" X="12" Y="107" Width="348" Height="22" Attributes="196611" Text="SHA-1 thumbprint of a certificate that has its private key in Local Computer \ Personal (certlm.msc). If the service account is not LocalSystem, grant it read access to that private key or the service will not start." Order="1000"/>
+    <ROW Dialog_="TlsDlg" Control="ThumbprintNote" Type="Text" X="12" Y="107" Width="348" Height="22" Attributes="131075" Text="SHA-1 thumbprint of a certificate that has its private key in Local Computer \ Personal (certlm.msc). If the service account is not LocalSystem, grant it read access to that private key or the service will not start." Order="1000"/>
     <ROW Dialog_="TlsDlg" Control="UsePfxCheck" Type="CheckBox" X="12" Y="133" Width="348" Height="14" Attributes="3" Property="MV_CERT_USEPFX" Text="Use a &amp;PFX file instead of a certificate from the store" Order="1100"/>
     <ROW Dialog_="TlsDlg" Control="PfxPathLabel" Type="Text" X="24" Y="152" Width="108" Height="10" Attributes="3" Text="PFX &amp;file path:" Order="1200"/>
     <ROW Dialog_="TlsDlg" Control="PfxPathEdit" Type="Edit" X="135" Y="150" Width="225" Height="16" Attributes="3" Property="MV_CERT_PATH" Text="{260}" Order="1300"/>
     <ROW Dialog_="TlsDlg" Control="PfxPasswordLabel" Type="Text" X="24" Y="172" Width="108" Height="10" Attributes="3" Text="PFX pass&amp;word:" Order="1400"/>
     <ROW Dialog_="TlsDlg" Control="PfxPasswordEdit" Type="Edit" X="135" Y="170" Width="225" Height="16" Attributes="2097155" Property="MV_CERT_PASSWORD" Text="{256}" Order="1500"/>
-    <ROW Dialog_="TlsDlg" Control="PfxNote" Type="Text" X="12" Y="190" Width="348" Height="40" Attributes="196611" Text="The PFX password is stored in plain text in %ProgramData%\MiniVault\appsettings.json (ACL-protected). Prefer the store thumbprint on a Windows host; use a PFX when the same certificate is deployed to several hosts. Do not use double quotes." Order="1600"/>
+    <ROW Dialog_="TlsDlg" Control="PfxNote" Type="Text" X="12" Y="190" Width="348" Height="40" Attributes="131075" Text="The PFX password is stored in plain text in %ProgramData%\MiniVault\appsettings.json (ACL-protected). Prefer the store thumbprint on a Windows host; use a PFX when the same certificate is deployed to several hosts. Do not use double quotes." Order="1600"/>
     <ROW Dialog_="TlsDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="1700"/>
     <ROW Dialog_="TlsDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="1800" TextLocId="-" Options="1"/>
     <ROW Dialog_="TlsDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="1900" TextLocId="-" Options="1"/>
     <ROW Dialog_="TlsDlg" Control="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Cancel]" Order="2000" TextLocId="-" Options="1"/>
-    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryAccount" Type="Text" X="12" Y="115" Width="348" Height="12" Attributes="196611" Text="Service account: [MV_SERVICEACCOUNT]" Order="1100"/>
-    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryUrl" Type="Text" X="12" Y="129" Width="348" Height="12" Attributes="196611" Text="Listen URL: [MV_URL]" Order="1200"/>
-    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryCert" Type="Text" X="12" Y="143" Width="348" Height="12" Attributes="196611" Text="Certificate: [MV_CERT_THUMBPRINT][MV_CERT_PATH]" Order="1300"/>
-    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryRecoverySingle" Type="Text" X="12" Y="157" Width="348" Height="12" Attributes="196611" Text="Recovery: single recovery key" Order="1400"/>
-    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryRecoveryShamir" Type="Text" X="12" Y="157" Width="348" Height="12" Attributes="196611" Text="Recovery: Shamir shares, [MV_THRESHOLD] of [MV_SHARES] needed" Order="1500"/>
-    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryNote" Type="Text" X="12" Y="175" Width="348" Height="36" Attributes="196611" Text="The recovery material will be written to %ProgramData%\MiniVault\recovery-&lt;timestamp&gt;.txt. The SQL Server connection string is not repeated here because it may contain a password." Order="1600"/>
+    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryAccount" Type="Text" X="12" Y="115" Width="348" Height="12" Attributes="131075" Text="Service account: [MV_SERVICEACCOUNT]" Order="1100"/>
+    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryUrl" Type="Text" X="12" Y="129" Width="348" Height="12" Attributes="131075" Text="Listen URL: [MV_URL]" Order="1200"/>
+    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryCert" Type="Text" X="12" Y="143" Width="348" Height="12" Attributes="131075" Text="Certificate: [MV_CERT_THUMBPRINT][MV_CERT_PATH]" Order="1300"/>
+    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryRecoverySingle" Type="Text" X="12" Y="157" Width="348" Height="12" Attributes="131075" Text="Recovery: single recovery key" Order="1400"/>
+    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryRecoveryShamir" Type="Text" X="12" Y="157" Width="348" Height="12" Attributes="131075" Text="Recovery: Shamir shares, [MV_THRESHOLD] of [MV_SHARES] needed" Order="1500"/>
+    <ROW Dialog_="VerifyReadyDlg" Control="MvSummaryNote" Type="Text" X="12" Y="175" Width="348" Height="36" Attributes="131075" Text="The recovery material will be written to %ProgramData%\MiniVault\recovery-&lt;timestamp&gt;.txt. The SQL Server connection string is not repeated here because it may contain a password." Order="1600"/>
     <ROW Dialog_="SqlDlg" Control="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" Attributes="1048577" Text="[BannerBitmap]" Order="100"/>
     <ROW Dialog_="SqlDlg" Control="Title" Type="Text" X="12" Y="6" Width="300" Height="15" Attributes="196611" Text="SQL Server connection" TextStyle="[DlgTitleFont]" Order="200"/>
     <ROW Dialog_="SqlDlg" Control="Description" Type="Text" X="12" Y="21" Width="340" Height="20" Attributes="196611" Text="Where MiniVault stores its data. The master key never goes into this database." Order="300"/>
@@ -979,8 +979,9 @@
     <ROW Dialog_="SqlDlg" Control="TrustCheck" Type="CheckBox" X="250" Y="165" Width="110" Height="12" Attributes="3" Property="MV_SQL_TRUSTCERT" Text="&amp;Trust server certificate" Order="1600"/>
     <ROW Dialog_="SqlDlg" Control="AdvancedCheck" Type="CheckBox" X="12" Y="181" Width="255" Height="12" Attributes="3" Property="MV_SQL_ADVANCED" Text="Enter the &amp;connection string directly (advanced)" Order="1700"/>
     <ROW Dialog_="SqlDlg" Control="TestButton" Type="PushButton" X="276" Y="178" Width="84" Height="17" Attributes="3" Text="Test co&amp;nnection" Order="1800"/>
-    <ROW Dialog_="SqlDlg" Control="CsEdit" Type="Edit" X="12" Y="196" Width="348" Height="22" Attributes="65539" Property="MV_CONNECTIONSTRING" Text="{2048}" Order="1900"/>
-    <ROW Dialog_="SqlDlg" Control="AuthNote" Type="Text" X="12" Y="220" Width="348" Height="12" Attributes="196611" Text="Windows Authentication is tested as you; the service connects as the account chosen on the next page." Order="2000"/>
+    <ROW Dialog_="SqlDlg" Control="CsEdit" Type="Edit" X="12" Y="197" Width="348" Height="18" Attributes="65539" Property="MV_CONNECTIONSTRING" Text="{2048}" Order="1900"/>
+    <ROW Dialog_="SqlDlg" Control="StatusText" Type="Text" X="12" Y="218" Width="348" Height="14" Attributes="131075" Text="[MV_SQL_RESULT]" Order="2000"/>
+    <ROW Dialog_="SqlDlg" Control="StatusHint" Type="Text" X="12" Y="218" Width="348" Height="14" Attributes="131075" Text="Click Test connection; Next is enabled once the connection succeeds. Windows Authentication is tested as you; the service will connect as the account chosen on the next page." Order="2050"/>
     <ROW Dialog_="SqlDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="2100"/>
     <ROW Dialog_="SqlDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="2200" TextLocId="-" Options="1"/>
     <ROW Dialog_="SqlDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="2300" TextLocId="-" Options="1"/>
@@ -995,13 +996,13 @@
     <ROW Dialog_="ServiceDlg" Control="AccountEdit" Type="Edit" X="135" Y="100" Width="225" Height="16" Attributes="3" Property="MV_SERVICEACCOUNT" Text="{256}" Order="800"/>
     <ROW Dialog_="ServiceDlg" Control="AccountPasswordLabel" Type="Text" X="24" Y="122" Width="108" Height="10" Attributes="3" Text="Account &amp;password:" Order="900"/>
     <ROW Dialog_="ServiceDlg" Control="AccountPasswordEdit" Type="Edit" X="135" Y="120" Width="225" Height="16" Attributes="2097155" Property="MV_SERVICEACCOUNT_PASSWORD" Text="{256}" Order="1000"/>
-    <ROW Dialog_="ServiceDlg" Control="AccountNote" Type="Text" X="12" Y="138" Width="348" Height="12" Attributes="196611" Text="The account must already hold 'Log on as a service'. For a gMSA enter DOMAIN\name$ and no password." Order="1100"/>
+    <ROW Dialog_="ServiceDlg" Control="AccountNote" Type="Text" X="12" Y="138" Width="348" Height="12" Attributes="131075" Text="The account must already hold 'Log on as a service'. For a gMSA enter DOMAIN\name$ and no password." Order="1100"/>
     <ROW Dialog_="ServiceDlg" Control="UsePasswordCheck" Type="CheckBox" X="12" Y="153" Width="348" Height="12" Attributes="3" Property="MV_MASTERKEY_USEPASSWORD" Text="&amp;Derive the master key from a password instead of generating a random one" Order="1200"/>
     <ROW Dialog_="ServiceDlg" Control="MasterKeyLabel" Type="Text" X="24" Y="171" Width="108" Height="10" Attributes="3" Text="&amp;Master key password:" Order="1300"/>
     <ROW Dialog_="ServiceDlg" Control="MasterKeyEdit" Type="Edit" X="135" Y="169" Width="225" Height="16" Attributes="2097155" Property="MV_MASTERKEY" Text="{256}" Order="1400"/>
     <ROW Dialog_="ServiceDlg" Control="MasterKeyConfirmLabel" Type="Text" X="24" Y="191" Width="108" Height="10" Attributes="3" Text="C&amp;onfirm password:" Order="1500"/>
     <ROW Dialog_="ServiceDlg" Control="MasterKeyConfirmEdit" Type="Edit" X="135" Y="189" Width="225" Height="16" Attributes="2097155" Property="MV_MASTERKEY_CONFIRM" Text="{256}" Order="1600"/>
-    <ROW Dialog_="ServiceDlg" Control="MasterKeyNote" Type="Text" X="12" Y="207" Width="348" Height="26" Attributes="196611" Text="Used once, now, to derive the key - not a way back in later: only the recovery material restores a lost master key. Without this option a random 256-bit key is generated. No double quotes." Order="1700"/>
+    <ROW Dialog_="ServiceDlg" Control="MasterKeyNote" Type="Text" X="12" Y="207" Width="348" Height="26" Attributes="131075" Text="Used once, now, to derive the key - not a way back in later: only the recovery material restores a lost master key. Without this option a random 256-bit key is generated. No double quotes." Order="1700"/>
     <ROW Dialog_="ServiceDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="1800"/>
     <ROW Dialog_="ServiceDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="1900" TextLocId="-" Options="1"/>
     <ROW Dialog_="ServiceDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="2000" TextLocId="-" Options="1"/>
@@ -1048,6 +1049,12 @@
     <ROW Dialog_="SqlDlg" Control_="PasswordEdit" Action="Disable" Condition="MV_SQL_AUTH &lt;&gt; &quot;sql&quot; OR MV_SQL_ADVANCED = &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="CsEdit" Action="Enable" Condition="MV_SQL_ADVANCED = &quot;1&quot;"/>
     <ROW Dialog_="SqlDlg" Control_="CsEdit" Action="Disable" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="StatusText" Action="Show" Condition="MV_SQL_RESULT &lt;&gt; &quot;&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="StatusText" Action="Hide" Condition="MV_SQL_RESULT = &quot;&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="StatusHint" Action="Show" Condition="MV_SQL_RESULT = &quot;&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="StatusHint" Action="Hide" Condition="MV_SQL_RESULT &lt;&gt; &quot;&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Action="Enable" Condition="MV_SQL_OK = &quot;1&quot;"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Action="Disable" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;"/>
     <ROW Dialog_="ServiceDlg" Control_="AccountEdit" Action="Enable" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot;"/>
     <ROW Dialog_="ServiceDlg" Control_="AccountEdit" Action="Disable" Condition="MV_SERVICEACCOUNT_KIND &lt;&gt; &quot;Custom&quot;"/>
     <ROW Dialog_="ServiceDlg" Control_="AccountPasswordEdit" Action="Enable" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot;"/>
@@ -1108,18 +1115,28 @@
     <ROW Dialog_="MvErrorDlg" Control_="OK" Event="EndDialog" Argument="Return" Condition="1" Ordering="1"/>
     <ROW Dialog_="SqlDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="SqlDlg" Control_="Back" Event="NewDialog" Argument="FolderDlg" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="1"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="2"/>
-    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="3"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[MV_UI_ERROR]" Argument="Windows Authentication is recommended: the service then connects with its own Windows account and no password is stored. With SQL Server Authentication the login and password are written to %ProgramData%\MiniVault\appsettings.json in plain text (protected only by the folder's ACL)." Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="5"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="SpawnDialog" Argument="MvErrorDlg" Condition="MV_SQL_AUTH = &quot;sql&quot;" Ordering="6"/>
+    <ROW Dialog_="SqlDlg" Control_="AuthGroup" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="7"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
+    <ROW Dialog_="SqlDlg" Control_="AdvancedCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="5"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
+    <ROW Dialog_="SqlDlg" Control_="EncryptCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="5"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[MV_SQL_OK]" Argument="0" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[MV_SQL_RESULT]" Argument="{}" Condition="AI_INSTALL" Ordering="2"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="3"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="4"/>
+    <ROW Dialog_="SqlDlg" Control_="TrustCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="5"/>
     <ROW Dialog_="SqlDlg" Control_="TestButton" Event="[MV_CONNECTIONSTRING]" Argument="{}" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="1"/>
     <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="2"/>
     <ROW Dialog_="SqlDlg" Control_="TestButton" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="3"/>
@@ -1131,13 +1148,12 @@
     <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_CONNECTIONSTRING]" Argument="{}" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="1"/>
     <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_5" Condition="AI_INSTALL" Ordering="2"/>
     <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="BuildConnectionString" Condition="AI_INSTALL" Ordering="3"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the server name (for example sql01, sql01\INSTANCE or 192.168.1.45,1433)." Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="4"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="SpawnDialog" Argument="MvErrorDlg" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER = &quot;&quot;" Ordering="5"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the login for SQL Server Authentication, or choose Windows Authentication." Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER &lt;&gt; &quot;&quot; AND MV_SQL_AUTH = &quot;sql&quot; AND MV_SQL_USER = &quot;&quot;" Ordering="6"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="SpawnDialog" Argument="MvErrorDlg" Condition="MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER &lt;&gt; &quot;&quot; AND MV_SQL_AUTH = &quot;sql&quot; AND MV_SQL_USER = &quot;&quot;" Ordering="7"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="Enter the connection string." Condition="MV_SQL_ADVANCED = &quot;1&quot; AND MV_CONNECTIONSTRING = &quot;&quot;" Ordering="8"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="SpawnDialog" Argument="MvErrorDlg" Condition="MV_SQL_ADVANCED = &quot;1&quot; AND MV_CONNECTIONSTRING = &quot;&quot;" Ordering="9"/>
-    <ROW Dialog_="SqlDlg" Control_="Next" Event="NewDialog" Argument="ServiceDlg" Condition="(MV_SQL_ADVANCED = &quot;1&quot; AND MV_CONNECTIONSTRING &lt;&gt; &quot;&quot;) OR (MV_SQL_ADVANCED &lt;&gt; &quot;1&quot; AND MV_SQL_SERVER &lt;&gt; &quot;&quot; AND (MV_SQL_AUTH &lt;&gt; &quot;sql&quot; OR MV_SQL_USER &lt;&gt; &quot;&quot;))" Ordering="20"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="AI_DATA_SETTER_2" Condition="AI_INSTALL" Ordering="4"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="DoAction" Argument="TestSqlConnection" Condition="AI_INSTALL" Ordering="5"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="[MV_UI_ERROR]" Argument="[MV_SQL_RESULT]" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="6"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="SpawnDialog" Argument="MvErrorDlg" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="7"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="[AiRefreshDlg]" Argument="1" Condition="MV_SQL_OK &lt;&gt; &quot;1&quot;" Ordering="8"/>
+    <ROW Dialog_="SqlDlg" Control_="Next" Event="NewDialog" Argument="ServiceDlg" Condition="MV_SQL_OK = &quot;1&quot;" Ordering="20"/>
     <ROW Dialog_="ServiceDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="ServiceDlg" Control_="Back" Event="NewDialog" Argument="SqlDlg" Condition="AI_INSTALL" Ordering="1"/>
     <ROW Dialog_="ServiceDlg" Control_="KindGroup" Event="[MV_SERVICEACCOUNT]" Argument="{}" Condition="MV_SERVICEACCOUNT_KIND = &quot;Custom&quot; AND (MV_SERVICEACCOUNT = &quot;LocalSystem&quot; OR MV_SERVICEACCOUNT = &quot;NT AUTHORITY\NetworkService&quot;)" Ordering="1"/>
@@ -1197,7 +1213,7 @@
     <ROW Action="WriteMachineConfig" Type="3073" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiDialogComponent">
-    <ROW Dialog="MvErrorDlg" HCentering="50" VCentering="50" Width="300" Height="110" Attributes="3" Title="[ProductName] [Setup]" Control_Default="OK" Control_Cancel="OK"/>
+    <ROW Dialog="MvErrorDlg" HCentering="50" VCentering="50" Width="300" Height="110" Attributes="3" Title="[ProductName] [Setup]" Control_First="OK" Control_Default="OK" Control_Cancel="OK"/>
     <ROW Dialog="RecoveryDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_Default="Next" Control_Cancel="Cancel"/>
     <ROW Dialog="ServiceDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_Default="Next" Control_Cancel="Cancel"/>
     <ROW Dialog="SqlDlg" HCentering="50" VCentering="50" Width="370" Height="270" Attributes="3" Title="[ProductName] [Setup]" Control_Default="Next" Control_Cancel="Cancel"/>

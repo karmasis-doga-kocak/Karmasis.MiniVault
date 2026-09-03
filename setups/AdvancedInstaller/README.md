@@ -326,6 +326,20 @@ install never shows them and takes the same `MV_*` properties from the command l
 | `VerifyReadyDlg` | adds a summary (service account, URL, certificate, recovery mode) on a first install; the connection string is not repeated because it may hold a password. | — |
 | `ExitDialog` | adds the "open `recovery-<timestamp>.txt`, store it offline, delete it, grant the SQL login" note on a first install. | — |
 
+On the SQL page *Next* is enabled only after a successful *Test connection* (`MV_SQL_OK = "1"`, a
+`ControlCondition` re-applied by the page refresh); changing a radio button or check box resets
+`MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
+edited after the test is caught too. Choosing SQL Server Authentication pops up a warning that
+Windows Authentication is recommended (the login and password end up in `appsettings.json`). The
+last test result stays visible on the page (`MV_SQL_RESULT`) as well as in the message box.
+
+Two Windows Installer rules learned the hard way, both checked by a test install: body text must
+not be **Transparent** (attribute `0x10000`) — a transparent `Text` overlapping the repaint region
+of an edit makes radio buttons and labels vanish while typing (the theme only uses it over the
+banner bitmap; our body texts are `3` / `131075`); and a dialog whose `Control_First` is a `Text`
+is never created by `SpawnDialog` — Advanced Installer derives `Control_First` from the lowest
+`Order`, so the OK button of `MvErrorDlg` has the lowest order.
+
 A failed check sets `MV_UI_ERROR` and spawns `MvErrorDlg` (a small OK box) instead of moving on;
 the `NewDialog` event carries the complementary condition. This deliberately avoids depending on
 control conditions being re-evaluated while the user types: MSI evaluates `ControlCondition` rows
