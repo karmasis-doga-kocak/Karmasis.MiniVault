@@ -319,8 +319,8 @@ install never shows them and takes the same `MV_*` properties from the command l
 
 | Page | Inputs | Next-button checks |
 | --- | --- | --- |
-| `SqlDlg` | Laid out like SSMS's connect dialog: *Server name* (`MV_SQL_SERVER`), *Database* (`MV_SQL_DATABASE`, default `MiniVault`), *Authentication* radio group (`MV_SQL_AUTH` = `windows` / `sql`), *Login* / *Password* (`MV_SQL_USER`, `MV_SQL_PASSWORD`, enabled for `sql`), *Encrypt connection* (`MV_SQL_ENCRYPT`, default on), *Trust server certificate* (`MV_SQL_TRUSTCERT`). `BuildConnectionString` composes `MV_CONNECTIONSTRING` from them whenever a radio/check box changes, on *Test connection* and on *Next*; the composed string is shown read-only at the bottom. *Enter the connection string directly (advanced)* (`MV_SQL_ADVANCED`) disables the fields and makes that edit writable instead. *Test connection* then runs `TestSqlConnection` and shows `MV_SQL_RESULT` in a message box. | server name (or, in advanced mode, the string) not empty; a login for SQL Server Authentication |
-| `ServiceDlg` | *Service account* radio group (`MV_SERVICEACCOUNT_KIND` = `LocalSystem` / `NetworkService` / `Custom`); *Account* and *Account password* (`MV_SERVICEACCOUNT`, `MV_SERVICEACCOUNT_PASSWORD`) enabled for `Custom`; check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | Next writes `LocalSystem` / `NT AUTHORITY\NetworkService` into `MV_SERVICEACCOUNT` and clears the password for the built-in choices; `Custom` needs an account; with the master-key box ticked the password is required and must match, unticked clears both |
+| `SqlDlg` | Laid out like SSMS's connect dialog: *Server name* (`MV_SQL_SERVER`), *Database* (`MV_SQL_DATABASE`, default `MiniVault`), *Authentication* drop-down list (`MV_SQL_AUTH` = `windows` / `sql`, `ComboBox` table), *Login* / *Password* (`MV_SQL_USER`, `MV_SQL_PASSWORD`; always enabled, used for `sql` only), *Encrypt connection* (`MV_SQL_ENCRYPT`, default on), *Trust server certificate* (`MV_SQL_TRUSTCERT`). `BuildConnectionString` composes `MV_CONNECTIONSTRING` from them whenever a check box changes, on *Test connection* and on *Next*; the composed string is shown read-only at the bottom. *Enter the connection string directly (advanced)* (`MV_SQL_ADVANCED`) disables the fields and makes that edit writable instead. *Test connection* then runs `TestSqlConnection` and shows `MV_SQL_RESULT` in a message box. | server name (or, in advanced mode, the string) not empty; a login for SQL Server Authentication |
+| `ServiceDlg` | *Service account* drop-down list (`MV_SERVICEACCOUNT_KIND` = `LocalSystem` / `NetworkService` / `Custom`); *Account* and *Account password* (`MV_SERVICEACCOUNT`, `MV_SERVICEACCOUNT_PASSWORD`; always enabled, used for `Custom` only); check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | Next writes `LocalSystem` / `NT AUTHORITY\NetworkService` into `MV_SERVICEACCOUNT` and clears the password for the built-in choices; `Custom` needs a real account (not one of the built-in names); with the master-key box ticked the password is required and must match, unticked clears both |
 | `TlsDlg` | `MV_URL`, `MV_CERT_THUMBPRINT`; check box *Use a PFX file* → `MV_CERT_PATH`, `MV_CERT_PASSWORD`. | URL not empty; exactly one certificate source (the other mode's properties are cleared on Next, so `MachineConfigWriter` never sees both) |
 | `RecoveryDlg` | check box *Split into Shamir shares* bound to `MV_RECOVERY` (ticked = `shamir`, unticked = cleared = single), `MV_SHARES`, `MV_THRESHOLD` (integer edits); acknowledgement check box `MV_RECOVERY_ACK`. | acknowledgement ticked; for shamir, shares and threshold each within 2..255 |
 | `VerifyReadyDlg` | adds a summary (service account, URL, certificate, recovery mode) on a first install; the connection string is not repeated because it may hold a password. | — |
@@ -329,11 +329,14 @@ install never shows them and takes the same `MV_*` properties from the command l
 On the SQL page *Next* is enabled only after a successful *Test connection* (`MV_SQL_OK = "1"`, a
 `ControlCondition` re-applied by the page refresh); changing a radio button or check box resets
 `MV_SQL_OK`, and *Next* re-runs the test with the current fields before moving on, so a server name
-edited after the test is caught too. While SQL Server Authentication is selected the page shows a
-note (a bold "Note:" label in the theme's `DlgFontBold8` next to plain text — one `Text` control
-cannot mix styles) that a password is kept on the server, DPAPI-protected, while Windows
-Authentication needs none; with Windows Authentication the same spot holds the one-line hint about
-the Next lock. No colour: a password that exists but is protected is worth a note, not a warning.
+edited after the test is caught too. A two-line note at the bottom of the page says that Next is
+enabled after a successful test and that SQL Server Authentication keeps a (DPAPI-protected)
+password on the server while Windows Authentication needs none. It is static, and Login/Password
+stay enabled whichever authentication is chosen, because a `ComboBox` cannot publish `ControlEvent`
+rows (MSI), so nothing can refresh the page when the selection changes. The drop-down lists replaced
+`RadioButtonGroup` controls after a test run showed the radio buttons vanishing on the first
+keystroke in a password edit (they came back on mouse-over — a repaint problem of button-class
+controls that neither opaque texts nor a bordered group fixed); combo boxes are not affected.
 The test result (`MV_SQL_RESULT`) is shown in a message box with an information or warning icon.
 
 The connection string never reaches `appsettings.json` in clear text: `WriteMachineConfig` writes
@@ -359,8 +362,8 @@ MiniVault Setup"). Outside the full UI (`UILevel` ≠ 5) it only logs. The conne
 the SQL-authentication warning and every Next-button validation use it. After the box the control
 raises `[AiRefreshDlg]=1` (compiled by Advanced Installer into a `NewDialog` to a generated
 `<Dialog>_1` clone) so the Next lock and the Enable/Disable `ControlCondition` rows — which MSI
-evaluates only when a page is built — are re-applied; the forward `NewDialog` carries the
-complementary condition (`MV_SQL_OK = "1"`, `MV_UI_ERROR = ""`).
+evaluates only when a page is built — are re-applied; the check boxes do the same. The forward
+`NewDialog` carries the complementary condition (`MV_SQL_OK = "1"`, `MV_UI_ERROR = ""`).
 
 `threshold <= shares` is the one rule the dialog cannot express (MSI conditions compare two
 properties as strings), so `ValidateProperties` — immediate, before `InstallInitialize` — checks the

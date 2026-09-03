@@ -429,8 +429,10 @@ foreach ($listProperty in @('SecureCustomProperties', 'MsiHiddenProperties')) {
 if ($components.ContainsKey('caphyon.advinst.msicomp.MsiCheckBoxComponent')) {
     foreach ($row in @($components['caphyon.advinst.msicomp.MsiCheckBoxComponent'].ROW)) { $knownProperties[$row.Property] = $true }
 }
-if ($components.ContainsKey('caphyon.advinst.msicomp.MsiRadioButtonComponent')) {
-    foreach ($row in @($components['caphyon.advinst.msicomp.MsiRadioButtonComponent'].ROW)) { $knownProperties[$row.Property] = $true }
+foreach ($listComponent in @('caphyon.advinst.msicomp.MsiRadioButtonComponent', 'caphyon.advinst.msicomp.MsiComboBoxComponent')) {
+    if ($components.ContainsKey($listComponent)) {
+        foreach ($row in @($components[$listComponent].ROW)) { $knownProperties[$row.Property] = $true }
+    }
 }
 if ($components.ContainsKey('caphyon.advinst.msicomp.MsiControlEventComponent')) {
     foreach ($row in @($components['caphyon.advinst.msicomp.MsiControlEventComponent'].ROW)) {
@@ -567,6 +569,21 @@ foreach ($row in $controlRows) {
         }
         if ($row.Type -eq 'CheckBox' -and @($checkBoxRows | Where-Object { $_.Property -eq $bound }).Count -ne 1) {
             Write-Fail "check box $key has no CheckBox-table row for $bound (its ticked value would be undefined)"
+        }
+        if ($row.Type -eq 'ComboBox') {
+            $comboRows = @()
+            if ($components.ContainsKey('caphyon.advinst.msicomp.MsiComboBoxComponent')) {
+                $comboRows = @($components['caphyon.advinst.msicomp.MsiComboBoxComponent'].ROW | Where-Object { $_.Property -eq $bound })
+            }
+            if ($comboRows.Count -lt 2) {
+                Write-Fail "combo box $key has fewer than two ComboBox-table rows for $bound"
+            } elseif ($properties.ContainsKey($bound) -and @($comboRows | Where-Object { $_.Value -eq $properties[$bound] }).Count -ne 1) {
+                Write-Fail "combo box ${key}: the default value '$($properties[$bound])' of $bound is not one of its entries"
+            }
+            # A ComboBox cannot publish ControlEvents (MSI), so nothing may hang an event off it.
+            if (@($eventRows | Where-Object { $_.Dialog_ -eq $row.Dialog_ -and $_.Control_ -eq $row.Control }).Count -gt 0) {
+                Write-Fail "combo box $key has ControlEvent rows; MSI combo boxes cannot publish events"
+            }
         }
         if ($row.Type -eq 'RadioButtonGroup') {
             $radioRows = @()
