@@ -7,10 +7,10 @@ Installs Karmasis MiniVault as a Windows service.
 From the repo root, on Windows:
 
 ```
-dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64
+dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64
 ```
 
-This produces a self-contained `win-x64` build in `src/MiniVault.Server/bin/publish/win-x64`, including
+This produces a self-contained `win-x64` build in `src/Karmasis.MiniVault.Server/bin/publish/win-x64`, including
 `minivault.exe` and `appsettings.json` (`appsettings.Development.json` is intentionally excluded from
 publish output).
 

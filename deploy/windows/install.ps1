@@ -33,7 +33,7 @@
 param(
     [string]$InstallDir = 'C:\Program Files\Karmasis\MiniVault',
 
-    # Folder produced by `dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64`.
+    # Folder produced by `dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64`.
     [string]$SourceDir,
 
     # Connection string for the MiniVault database. Required.

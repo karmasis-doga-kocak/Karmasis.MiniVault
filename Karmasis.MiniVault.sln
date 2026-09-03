@@ -5,19 +5,19 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Server", "src\MiniVault.Server\MiniVault.Server.csproj", "{2899F8E8-DA6F-402D-BD5E-30896EA83B61}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karmasis.MiniVault.Server", "src\Karmasis.MiniVault.Server\Karmasis.MiniVault.Server.csproj", "{2899F8E8-DA6F-402D-BD5E-30896EA83B61}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{0C88DD14-F956-CE84-757C-A364CCF449FC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Server.Tests", "test\MiniVault.Server.Tests\MiniVault.Server.Tests.csproj", "{03D0E53A-9B90-4F05-AC02-D9B209150193}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karmasis.MiniVault.Server.Tests", "test\Karmasis.MiniVault.Server.Tests\Karmasis.MiniVault.Server.Tests.csproj", "{03D0E53A-9B90-4F05-AC02-D9B209150193}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Contracts", "src\MiniVault.Contracts\MiniVault.Contracts.csproj", "{5EA1FC61-19CE-4833-BA86-18AF42FC74DE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karmasis.MiniVault.Contracts", "src\Karmasis.MiniVault.Contracts\Karmasis.MiniVault.Contracts.csproj", "{5EA1FC61-19CE-4833-BA86-18AF42FC74DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Client", "src\MiniVault.Client\MiniVault.Client.csproj", "{EF46DFF0-B898-43FF-ACF7-BD9424F09863}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karmasis.MiniVault.Client", "src\Karmasis.MiniVault.Client\Karmasis.MiniVault.Client.csproj", "{EF46DFF0-B898-43FF-ACF7-BD9424F09863}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Client.Tests", "test\MiniVault.Client.Tests\MiniVault.Client.Tests.csproj", "{45284CEC-F464-4925-B230-1B34698FB56F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karmasis.MiniVault.Client.Tests", "test\Karmasis.MiniVault.Client.Tests\Karmasis.MiniVault.Client.Tests.csproj", "{45284CEC-F464-4925-B230-1B34698FB56F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniVault.Client.DependencyInjection", "src\MiniVault.Client.DependencyInjection\MiniVault.Client.DependencyInjection.csproj", "{6BBBF479-8B64-4FFE-95C1-159871E46AF1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karmasis.MiniVault.Client.DependencyInjection", "src\Karmasis.MiniVault.Client.DependencyInjection\Karmasis.MiniVault.Client.DependencyInjection.csproj", "{6BBBF479-8B64-4FFE-95C1-159871E46AF1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "setups", "setups", "{3DD97CDF-0AB4-D59A-9DB7-08275AD1C0C4}"
 EndProject

@@ -59,7 +59,7 @@ for the lifetime of the process — creating a new client per request throws awa
 opens a new `HttpClient`.
 
 ```csharp
-using MiniVault.Client;
+using Karmasis.MiniVault.Client;
 
 var options = new MiniVaultOptions
 {
@@ -105,8 +105,8 @@ call `client.Dispose()` yourself in your shutdown path.
 ## 4. Setup with DI (`Microsoft.Extensions.DependencyInjection`)
 
 ```csharp
-using MiniVault.Client;
-using MiniVault.Client.DependencyInjection;
+using Karmasis.MiniVault.Client;
+using Karmasis.MiniVault.Client.DependencyInjection;
 
 services.AddMiniVaultClient(o =>
 {
@@ -365,7 +365,7 @@ secret file from section 7:
 
 ```csharp
 using System.Configuration;
-using MiniVault.Client;
+using Karmasis.MiniVault.Client;
 using Ninject.Modules;
 
 public class MiniVaultModule : NinjectModule
@@ -394,7 +394,7 @@ logs whenever it is served from cache:
 
 ```csharp
 using System.Security.Cryptography.X509Certificates;
-using MiniVault.Client;
+using Karmasis.MiniVault.Client;
 
 public class DataskopeCertificateProvider
 {

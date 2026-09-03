@@ -9,7 +9,7 @@
     2. Lists every custom action row with its binary, type and sequencing, and checks that each
        managed custom action names a method that exists in the custom-actions assembly's source.
     3. Every MsiFilesComponent SourcePath and the SynchronizedFolderComponent SourcePath resolve to
-       something that exists (run 'dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64'
+       something that exists (run 'dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64'
        first, or pass -SkipPayload).
     4. The custom-actions assembly paths referenced from the .aip match the project's output path,
        and (unless -SkipPayload) the built DLL is there.
@@ -295,7 +295,7 @@ foreach ($row in @($components['caphyon.advinst.msicomp.MsiFilesComponent'].ROW)
     } elseif (Test-Path -LiteralPath $full -PathType Leaf) {
         Write-Ok "MsiFilesComponent '$($row.File)' -> $full"
     } else {
-        Write-Fail "MsiFilesComponent '$($row.File)' points at a missing file: $full (run: dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64)"
+        Write-Fail "MsiFilesComponent '$($row.File)' points at a missing file: $full (run: dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64)"
     }
 }
 
@@ -313,7 +313,7 @@ foreach ($row in @($components['caphyon.advinst.msicomp.SynchronizedFolderCompon
             Write-Ok "synchronized folder -> $full ($count files, minivault.exe present)"
         }
     } else {
-        Write-Fail "synchronized folder is missing: $full (run: dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64)"
+        Write-Fail "synchronized folder is missing: $full (run: dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64)"
     }
 }
 

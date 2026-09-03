@@ -19,7 +19,7 @@
 # pipeline's image_version into the .aip before the MSI is built.
 #
 # *** IMPORTANT - restore will currently FAIL on this branch ***
-# Karmasis.MiniVault.Client (and therefore MiniVault.Client.DependencyInjection and the
+# Karmasis.MiniVault.Client (and therefore Karmasis.MiniVault.Client.DependencyInjection and the
 # solution-wide restore/build/test below) depends on Karmasis.Cryptography 26.3.0-dek.1, a
 # prerelease that today is published ONLY to the developer-local folder feed
 # (..\..\local-nuget - see the root nuget.config and docs/client.md, "Release
@@ -133,7 +133,7 @@ stages:
       inputs:
         command: 'publish'
         publishWebProjects: false
-        projects: 'src/MiniVault.Server/MiniVault.Server.csproj'
+        projects: 'src/Karmasis.MiniVault.Server/Karmasis.MiniVault.Server.csproj'
         arguments: '-p:PublishProfile=win-x64 --configuration $(BuildConfiguration)'
         zipAfterPublish: false
         modifyOutputPath: false
@@ -141,7 +141,7 @@ stages:
     - task: PublishBuildArtifacts@1
       displayName: 'Publish minivault-win-x64 artifact'
       inputs:
-        PathtoPublish: 'src/MiniVault.Server/bin/publish/win-x64'
+        PathtoPublish: 'src/Karmasis.MiniVault.Server/bin/publish/win-x64'
         ArtifactName: 'minivault-win-x64'
 
 # ---------------------------------------------------------------------------------------
@@ -186,7 +186,7 @@ stages:
       displayName: 'Pack client NuGet packages'
       inputs:
         command: 'pack'
-        packagesToPack: 'src/MiniVault.Contracts/MiniVault.Contracts.csproj;src/MiniVault.Client/MiniVault.Client.csproj;src/MiniVault.Client.DependencyInjection/MiniVault.Client.DependencyInjection.csproj'
+        packagesToPack: 'src/Karmasis.MiniVault.Contracts/Karmasis.MiniVault.Contracts.csproj;src/Karmasis.MiniVault.Client/Karmasis.MiniVault.Client.csproj;src/Karmasis.MiniVault.Client.DependencyInjection/Karmasis.MiniVault.Client.DependencyInjection.csproj'
         versioningScheme: 'byEnvVar'
         versionEnvVar: 'image_version'
         outputDir: '$(build.artifactStagingDirectory)'
@@ -329,7 +329,7 @@ stages:
         buildType: 'current'
         downloadType: 'single'
         artifactName: 'minivault-win-x64'
-        downloadPath: '$(Build.SourcesDirectory)/src/MiniVault.Server/bin/publish'
+        downloadPath: '$(Build.SourcesDirectory)/src/Karmasis.MiniVault.Server/bin/publish'
 
     # DownloadBuildArtifacts@1 recreates the artifact name as a subfolder; the .aip's
     # SynchronizedFolderComponent expects the payload directly under .../publish/win-x64.
@@ -338,8 +338,8 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          $downloaded = Join-Path "$(Build.SourcesDirectory)\src\MiniVault.Server\bin\publish" "minivault-win-x64"
-          $target = Join-Path "$(Build.SourcesDirectory)\src\MiniVault.Server\bin\publish" "win-x64"
+          $downloaded = Join-Path "$(Build.SourcesDirectory)\src\Karmasis.MiniVault.Server\bin\publish" "minivault-win-x64"
+          $target = Join-Path "$(Build.SourcesDirectory)\src\Karmasis.MiniVault.Server\bin\publish" "win-x64"
           if (Test-Path $target) { Remove-Item $target -Recurse -Force }
           Move-Item $downloaded $target
 

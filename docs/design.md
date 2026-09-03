@@ -17,7 +17,7 @@ diğer servisler `Karmasis.MiniVault.Client` paketi ile M2M kimlik doğrulayarak
 ### 2.1. V1'e giren
 
 - `Karmasis.Cryptography` paketine DEK/KEK anahtar hiyerarşisi, AES-GCM, HKDF ve Shamir eklenmesi.
-- `MiniVault.Server`: net10 minimal API, EF Core, SQL Server; `init`, `recover`, `rotate-dek`,
+- `Karmasis.MiniVault.Server`: net10 minimal API, EF Core, SQL Server; `init`, `recover`, `rotate-dek`,
   `migrate`, `client` ve `role` CLI komutları.
 - M2M kimlik doğrulama: client id + secret → kısa ömürlü JWT.
 - Yetkilendirme: rol tabanlı, scope (isim öneki) + read/write.
@@ -37,7 +37,7 @@ otomatik DEK rotasyonu zamanlayıcısı, Windows container, Classic Collector en
 
 ```
 +--------------------+        HTTPS (JWT)        +---------------------+
-| Classic Collector  | ------------------------> |  MiniVault.Server   |
+| Classic Collector  | ------------------------> |  Karmasis.MiniVault.Server   |
 | (net48, Ninject)   |  Karmasis.MiniVault.Client|  net10 minimal API  |
 +--------------------+                           |                     |
 +--------------------+                           |  IMasterKeyProvider |
@@ -59,12 +59,12 @@ yetkiyi kontrol eder → sırrın `DekVersion`'ına ait sarılmış DEK'i KEK il
 Repo düzeni:
 
 ```
-src/MiniVault.Server/                       net10, minimal API + CLI (assembly adı: minivault)
-src/MiniVault.Client/                       netstandard2.0 nuget
-src/MiniVault.Client.DependencyInjection/   netstandard2.0 nuget, MS.Extensions.DI.Abstractions
-src/MiniVault.Contracts/                    netstandard2.0, DTO'lar (Server ve Client ortak)
-test/MiniVault.Server.Tests/
-test/MiniVault.Client.Tests/
+src/Karmasis.MiniVault.Server/                       net10, minimal API + CLI (assembly adı: minivault)
+src/Karmasis.MiniVault.Client/                       netstandard2.0 nuget
+src/Karmasis.MiniVault.Client.DependencyInjection/   netstandard2.0 nuget, MS.Extensions.DI.Abstractions
+src/Karmasis.MiniVault.Contracts/                    netstandard2.0, DTO'lar (Server ve Client ortak)
+test/Karmasis.MiniVault.Server.Tests/
+test/Karmasis.MiniVault.Client.Tests/
 deploy/windows/                             install.ps1, uninstall.ps1
 setups/AdvancedInstaller/                   .aip + net48 custom action projesi
 docker/                                     Dockerfile, docker-compose.yml
@@ -94,7 +94,7 @@ Diğer:
 - `InvariantGlobalization` kullanılmaz: `Microsoft.Data.SqlClient` invariant modda çalışmaz. Gerçek
   binary'yi process olarak çalıştıran bir smoke test bu regresyonu yakalar.
 
-## 5. MiniVault.Server
+## 5. Karmasis.MiniVault.Server
 
 ### 5.1. Proje yapısı
 
@@ -316,7 +316,7 @@ için `docs/operations.md`, "Quick reference".
 ### 6.1. Paketler
 
 - `Karmasis.MiniVault.Client` — `netstandard2.0`. Bağımlılıklar: `System.Text.Json`,
-  `Karmasis.Cryptography` (HKDF, AES-GCM), `MiniVault.Contracts`.
+  `Karmasis.Cryptography` (HKDF, AES-GCM), `Karmasis.MiniVault.Contracts`.
 - `Karmasis.MiniVault.Client.DependencyInjection` — `netstandard2.0`. Ek bağımlılık:
   `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Options`.
 
@@ -409,7 +409,7 @@ Hata gövdesi boş gelebilir. İstek yolunda sır adı ham `/` ile taşınır (s
 
 ### 7.1. Windows
 
-- `dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64` (self-contained).
+- `dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64` (self-contained).
 - `Host.UseWindowsService()`; sunucu konsoldan da çalışır. Servis olarak çalışırken content root
   binary'nin kendi klasörüdür.
 - `deploy/windows/install.ps1` (6 adım, PowerShell 5.1 uyumlu, `icacls` SID ile; anahtarlar:
@@ -535,7 +535,7 @@ Her adım ayrı implementasyon planı ve PR.
 - Dağıtım eserleri: win-x64 publish profili, `deploy/windows/install.ps1` + `uninstall.ps1`,
   `docker/Dockerfile` + `docker-compose.yml`, Advanced Installer `.aip` ve net48 custom action'ları,
   `azure-pipelines.yml`.
-- Testler: `MiniVault.Server.Tests` 222 test (LocalDB gerektirir), `MiniVault.Client.Tests` 121 test
+- Testler: `Karmasis.MiniVault.Server.Tests` 222 test (LocalDB gerektirir), `Karmasis.MiniVault.Client.Tests` 121 test
   (net10) / 120 test (net48), MSI custom action test projesinde 68 test (net48, ana solution'da,
   `dotnet test` ile koşar).
 

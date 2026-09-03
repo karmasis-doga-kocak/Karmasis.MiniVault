@@ -4,7 +4,7 @@ Files in this folder:
 
 | File | Purpose |
 | --- | --- |
-| `Dockerfile` | Multi-stage build (`sdk:10.0` -> `aspnet:10.0`), publishes `MiniVault.Server`. |
+| `Dockerfile` | Multi-stage build (`sdk:10.0` -> `aspnet:10.0`), publishes `Karmasis.MiniVault.Server`. |
 | `nuget.docker.config` | NuGet sources used **inside** the build stage (see comments in the file). |
 | `build-local.ps1` | Stages nupkgs from the local-nuget folder feed and builds the image for local dev. |
 | `docker-compose.yml` | `minivault-init` (profile `init`) + `minivault` services. |

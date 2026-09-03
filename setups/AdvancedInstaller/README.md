@@ -54,7 +54,7 @@ The MSI build depends on two outputs that must exist first.
 
 ```powershell
 # 1. The payload: self-contained win-x64 publish of the server.
-dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64
+dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64
 
 # 2. The custom actions. Part of Karmasis.MiniVault.sln, so a plain `dotnet build` at the repo root
 #    builds them too; this builds just the one project (see "Building the custom actions").
@@ -115,7 +115,7 @@ succeeds offline with the repo's own `nuget.config`.
 ## What the MSI does
 
 1. Installs the publish output to `[ProgramFiles64Folder]Karmasis\MiniVault` (`APPDIR`), via a
-   `SynchronizedFolderComponent` over `src/MiniVault.Server/bin/publish/win-x64`.
+   `SynchronizedFolderComponent` over `src/Karmasis.MiniVault.Server/bin/publish/win-x64`.
    `minivault.exe` itself is **excluded** from that synchronized folder and listed as a static
    `MsiFilesComponent` row instead, so exactly one row owns it. It cannot be left to the
    synchronized folder: `ServiceInstall`, `ServiceControl` and `ServiceConfig` all hang off a

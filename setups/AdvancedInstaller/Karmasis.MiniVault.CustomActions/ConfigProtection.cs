@@ -6,7 +6,7 @@ namespace Karmasis.MiniVault.CustomActions
 {
     /// <summary>
     /// DPAPI (LocalMachine) protection of configuration values, byte-for-byte what the server's
-    /// MiniVault.Server.Hosting.ProtectedConfiguration and deploy/windows/install.ps1 do: the same
+    /// Karmasis.MiniVault.Server.Hosting.ProtectedConfiguration and deploy/windows/install.ps1 do: the same
     /// application entropy, UTF-8 in, base64 out. The value is bound to the machine that produced it.
     /// </summary>
     public static class ConfigProtection

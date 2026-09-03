@@ -17,21 +17,21 @@ WORKDIR /src
 # Layer 1: files that change rarely, so `dotnet restore` below is cached until a
 # .csproj or the solution/SDK pinning actually changes.
 COPY global.json Directory.Build.props Karmasis.MiniVault.sln ./
-COPY src/MiniVault.Server/MiniVault.Server.csproj src/MiniVault.Server/
-COPY src/MiniVault.Contracts/MiniVault.Contracts.csproj src/MiniVault.Contracts/
-COPY src/MiniVault.Client/MiniVault.Client.csproj src/MiniVault.Client/
-COPY src/MiniVault.Client.DependencyInjection/MiniVault.Client.DependencyInjection.csproj src/MiniVault.Client.DependencyInjection/
+COPY src/Karmasis.MiniVault.Server/Karmasis.MiniVault.Server.csproj src/Karmasis.MiniVault.Server/
+COPY src/Karmasis.MiniVault.Contracts/Karmasis.MiniVault.Contracts.csproj src/Karmasis.MiniVault.Contracts/
+COPY src/Karmasis.MiniVault.Client/Karmasis.MiniVault.Client.csproj src/Karmasis.MiniVault.Client/
+COPY src/Karmasis.MiniVault.Client.DependencyInjection/Karmasis.MiniVault.Client.DependencyInjection.csproj src/Karmasis.MiniVault.Client.DependencyInjection/
 
 # Local nupkg feed (docker/build-local.ps1 populates this from D:\Karmasis\local-nuget
 # before `docker build` runs; empty in CI, which overrides NUGET_CONFIG instead).
 COPY packages/ packages/
 COPY ${NUGET_CONFIG} ./nuget.docker.config
 
-RUN dotnet restore src/MiniVault.Server/MiniVault.Server.csproj --configfile ./nuget.docker.config
+RUN dotnet restore src/Karmasis.MiniVault.Server/Karmasis.MiniVault.Server.csproj --configfile ./nuget.docker.config
 
 # Layer 2: the rest of the source, then publish without re-restoring.
 COPY src/ src/
-RUN dotnet publish src/MiniVault.Server -c Release -o /app --no-restore
+RUN dotnet publish src/Karmasis.MiniVault.Server -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ENV ASPNETCORE_ENVIRONMENT=Production

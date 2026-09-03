@@ -48,12 +48,12 @@ explicitly with `--all`.
 
 | Path | What it is |
 |---|---|
-| `src/MiniVault.Server` | The server and the operator CLI. .NET 10 minimal API, EF Core, SQL Server. Produces `minivault.exe`. |
-| `src/MiniVault.Contracts` | Request/response DTOs shared by the server and the client. `netstandard2.0`. |
-| `src/MiniVault.Client` | `Karmasis.MiniVault.Client`: the consuming-service library, with caching and offline start. `netstandard2.0`. |
-| `src/MiniVault.Client.DependencyInjection` | `AddMiniVaultClient` for `Microsoft.Extensions.DependencyInjection`. |
-| `test/MiniVault.Server.Tests` | Server unit and integration tests (xUnit, Shouldly, LocalDB). |
-| `test/MiniVault.Client.Tests` | Client tests against a stubbed `HttpMessageHandler`. |
+| `src/Karmasis.MiniVault.Server` | The server and the operator CLI. .NET 10 minimal API, EF Core, SQL Server. Produces `minivault.exe`. |
+| `src/Karmasis.MiniVault.Contracts` | Request/response DTOs shared by the server and the client. `netstandard2.0`. |
+| `src/Karmasis.MiniVault.Client` | `Karmasis.MiniVault.Client`: the consuming-service library, with caching and offline start. `netstandard2.0`. |
+| `src/Karmasis.MiniVault.Client.DependencyInjection` | `AddMiniVaultClient` for `Microsoft.Extensions.DependencyInjection`. |
+| `test/Karmasis.MiniVault.Server.Tests` | Server unit and integration tests (xUnit, Shouldly, LocalDB). |
+| `test/Karmasis.MiniVault.Client.Tests` | Client tests against a stubbed `HttpMessageHandler`. |
 | `deploy/windows` | `install.ps1` / `uninstall.ps1` for a scripted Windows service install. |
 | `docker` | `Dockerfile`, `docker-compose.yml`, and a local build script. |
 | `setups/AdvancedInstaller` | The MSI project (`.aip`) and its net48 custom actions. |
@@ -83,7 +83,7 @@ Initialize a development vault. The master key goes to a temporary path so it do
 a real install under `%ProgramData%`:
 
 ```powershell
-dotnet run --project src/MiniVault.Server -- init --recovery single `
+dotnet run --project src/Karmasis.MiniVault.Server -- init --recovery single `
   --ConnectionStrings:MiniVault "Server=(localdb)\MSSQLLocalDB;Database=MiniVaultDev;Integrated Security=true;TrustServerCertificate=true" `
   --MasterKey:Provider Dpapi `
   --MasterKey:Path "$env:TEMP\minivault-dev\masterkey.bin"
@@ -97,9 +97,9 @@ Every operator command reads the same configuration, so the two overrides are re
 $db = "Server=(localdb)\MSSQLLocalDB;Database=MiniVaultDev;Integrated Security=true;TrustServerCertificate=true"
 $key = "$env:TEMP\minivault-dev\masterkey.bin"
 
-dotnet run --project src/MiniVault.Server -- role add dev-reader --ConnectionStrings:MiniVault $db --MasterKey:Path $key
-dotnet run --project src/MiniVault.Server -- role grant dev-reader --scope dev/ --permission write --ConnectionStrings:MiniVault $db --MasterKey:Path $key
-dotnet run --project src/MiniVault.Server -- client add dev-app --role dev-reader --ConnectionStrings:MiniVault $db --MasterKey:Path $key
+dotnet run --project src/Karmasis.MiniVault.Server -- role add dev-reader --ConnectionStrings:MiniVault $db --MasterKey:Path $key
+dotnet run --project src/Karmasis.MiniVault.Server -- role grant dev-reader --scope dev/ --permission write --ConnectionStrings:MiniVault $db --MasterKey:Path $key
+dotnet run --project src/Karmasis.MiniVault.Server -- client add dev-app --role dev-reader --ConnectionStrings:MiniVault $db --MasterKey:Path $key
 ```
 
 `client add` prints the client secret once. Now start the server. It listens on HTTPS only, so in
@@ -109,7 +109,7 @@ Development environment:
 ```powershell
 dotnet dev-certs https --trust    # once per machine
 $env:ASPNETCORE_ENVIRONMENT = "Development"
-dotnet run --project src/MiniVault.Server -- --ConnectionStrings:MiniVault $db --MasterKey:Path $key --Tls:AllowDevelopmentCertificate true
+dotnet run --project src/Karmasis.MiniVault.Server -- --ConnectionStrings:MiniVault $db --MasterKey:Path $key --Tls:AllowDevelopmentCertificate true
 ```
 
 `appsettings.Development.json` sets `Tls:Url` to `https://localhost:8200`. From a second shell, get a
@@ -139,7 +139,7 @@ secret.
 ## Client library
 
 ```csharp
-using MiniVault.Client;
+using Karmasis.MiniVault.Client;
 
 var client = MiniVaultClientFactory.Create(new MiniVaultOptions
 {
@@ -159,7 +159,7 @@ target, and a stable release with that target has to come first.
 
 ## Deployment
 
-**Windows service.** `dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64` produces a
+**Windows service.** `dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64` produces a
 self-contained folder. `deploy/windows/install.ps1` copies it into place, writes
 `%ProgramData%\MiniVault\appsettings.json`, locks that folder down, runs `init`, prints the SQL grant
 script, and registers and starts the `KarmasisMiniVault` service. Re-running it upgrades in place.

@@ -175,7 +175,7 @@ See "Upgrading" below for what you still need to run by hand (`minivault migrate
 than MSI. Publish first:
 
 ```powershell
-dotnet publish src/MiniVault.Server -p:PublishProfile=win-x64
+dotnet publish src/Karmasis.MiniVault.Server -p:PublishProfile=win-x64
 ```
 
 Then, with a certificate from a PFX file:
