@@ -186,6 +186,46 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             InstallActions.ValidateProperties(session).ShouldBe((int)ActionResult.Success);
         }
 
+        [Theory]
+        [InlineData("single", "", "")]
+        [InlineData("", "", "")]
+        [InlineData("single", "1", "9")]   // ignored for single
+        [InlineData("shamir", "3", "2")]
+        [InlineData("Shamir", " 5 ", " 5 ")]
+        [InlineData("shamir", "255", "2")]
+        public void ValidateProperties_WithValidRecoveryOptions_Succeeds(string recovery, string shares, string threshold)
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty("MV_RECOVERY", recovery);
+            session.SetProperty("MV_SHARES", shares);
+            session.SetProperty("MV_THRESHOLD", threshold);
+
+            InstallActions.ValidateProperties(session).ShouldBe((int)ActionResult.Success);
+
+            session.HasMessage(InstallMessage.ERROR).ShouldBeFalse();
+        }
+
+        [Theory]
+        [InlineData("other", "3", "2", "MV_RECOVERY")]
+        [InlineData("shamir", "", "2", "whole numbers")]
+        [InlineData("shamir", "three", "2", "whole numbers")]
+        [InlineData("shamir", "3", "", "whole numbers")]
+        [InlineData("shamir", "1", "1", "threshold <= shares <= 255")]
+        [InlineData("shamir", "3", "1", "threshold <= shares <= 255")]
+        [InlineData("shamir", "2", "3", "threshold <= shares <= 255")]   // the rule the dialog cannot check
+        [InlineData("shamir", "256", "2", "threshold <= shares <= 255")]
+        public void ValidateProperties_WithInvalidRecoveryOptions_FailsBeforeInstallInitialize(string recovery, string shares, string threshold, string expectedFragment)
+        {
+            var session = new FakeMsiSession();
+            session.SetProperty("MV_RECOVERY", recovery);
+            session.SetProperty("MV_SHARES", shares);
+            session.SetProperty("MV_THRESHOLD", threshold);
+
+            InstallActions.ValidateProperties(session).ShouldBe((int)ActionResult.Failure);
+
+            session.LastMessage(InstallMessage.ERROR).ShouldContain(expectedFragment);
+        }
+
         // -------------------------------------------------------------------
         // RunInit
         // -------------------------------------------------------------------

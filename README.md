@@ -163,10 +163,12 @@ target, and a stable release with that target has to come first.
 self-contained folder. `deploy/windows/install.ps1` copies it into place, writes
 `%ProgramData%\MiniVault\appsettings.json`, locks that folder down, runs `init`, prints the SQL grant
 script, and registers and starts the `KarmasisMiniVault` service. Re-running it upgrades in place.
-The MSI in `setups/AdvancedInstaller` does the same work from `MV_*` properties, but it is authored
-only: the `.aip` and its custom actions exist and the custom actions are tested, while the MSI itself
-has never been built — that needs a machine with Advanced Installer, and the custom dialog pages are
-still a designer follow-up.
+The MSI in `setups/AdvancedInstaller` does the same work from `MV_*` properties, with a four-page
+wizard (SQL connection, service account and master key, HTTPS certificate, recovery mode) for an
+interactive first install. It is authored only: the `.aip`, its dialogs and its custom actions exist
+and the custom actions are tested, while the MSI itself has never been built — that needs a machine
+with Advanced Installer, and the first designer session has a short verification list in
+`setups/AdvancedInstaller/README.md`.
 
 **Docker.** `docker/Dockerfile` builds a Linux image on `mcr.microsoft.com/dotnet/aspnet:10.0` that
 runs as a non-root user, takes its master key from `MINIVAULT__MASTERKEY`, and mounts a PFX for TLS.

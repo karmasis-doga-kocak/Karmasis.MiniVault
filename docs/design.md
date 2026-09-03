@@ -536,7 +536,7 @@ Her adım ayrı implementasyon planı ve PR.
   `docker/Dockerfile` + `docker-compose.yml`, Advanced Installer `.aip` ve net48 custom action'ları,
   `azure-pipelines.yml`.
 - Testler: `MiniVault.Server.Tests` 222 test (LocalDB gerektirir), `MiniVault.Client.Tests` 121 test
-  (net10) / 120 test (net48), MSI custom action test projesinde 54 test (net48, ana solution'da,
+  (net10) / 120 test (net48), MSI custom action test projesinde 68 test (net48, ana solution'da,
   `dotnet test` ile koşar).
 
 **Henüz doğrulanmamış.**
@@ -554,3 +554,21 @@ Her adım ayrı implementasyon planı ve PR.
   `Kestrel__Endpoints__Http__Url` verildiğinde açılışın reddedilmesi doğrulanmadı.
 
 Maddelerin tam listesi ve yapılış sırası `docs/operations.md`, "Pre-production checklist" bölümündedir.
+
+### 12a. Ek (2026-09-03): MSI yapılandırma sayfaları
+
+- Custom action projesi SDK-style `net48` csproj'a çevrildi ve test projesiyle birlikte
+  `Karmasis.MiniVault.sln` içine alındı; ayrı setup solution'ı kaldırıldı. `dotnet build` / `dotnet test`
+  kök dizinde her şeyi kapsar (custom action testleri yalnızca Windows'ta koşar).
+- MSI'ın dört yapılandırma sayfası (`SqlDlg`, `ServiceDlg`, `TlsDlg`, `RecoveryDlg`) ve `MvErrorDlg`
+  `.aip` içinde XML olarak yazıldı; ilk kurulumda `FolderDlg` ile `VerifyReadyDlg` arasına girer,
+  upgrade'de (`OLDPRODUCTS`) atlanır, silent kurulumda görünmez. Her sayfa `Next`'te doğrular
+  (hata → `MV_UI_ERROR` + `MvErrorDlg`). `threshold <= shares` kuralı MSI koşuluyla ifade
+  edilemediğinden `ValidateProperties`, recovery üçlüsünü `InstallInitialize` öncesinde
+  `MiniVaultCli.BuildInitArguments` kuralıyla doğrular; bu silent kurulumu da kapsar.
+- Recovery material yine `%ProgramData%\MiniVault\recovery-<timestamp>.txt` dosyasına yazılır;
+  deferred action UI'a taşıyamaz. `VerifyReadyDlg` özet, `ExitDialog` "dosyayı kopyala ve sil" notu
+  gösterir.
+- Sayfalar designer'da henüz açılmadı ve MSI derlenmedi. İlk designer oturumunda doğrulanacaklar
+  `setups/AdvancedInstaller/README.md` "Dialogs" bölümünde; statik kontroller `verify-aip.ps1`
+  bölüm 6'da.

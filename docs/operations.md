@@ -95,12 +95,15 @@ character, not a delimiter. The MSI has no such exception: it rejects a double q
 properties (`MV_CONNECTIONSTRING`, `MV_CERT_PASSWORD`, `MV_MASTERKEY`, `MV_SERVICEACCOUNT_PASSWORD`)
 alike, because all four travel through the same `NAME="value"` list.
 
-**Interactive install**: today the MSI runs through the standard Advanced Installer dialogs only —
-the custom pages that would expose `MV_*` as form fields (connection string, master key, TLS,
-recovery) are a designer follow-up (see `setups/AdvancedInstaller/README.md`, "Designer follow-ups")
-and are not wired into the install sequence yet. Until then, use the silent install below (from a
-shortcut, a script, or `msiexec /i ... MV_...=...` with the UI still showing) to actually configure
-the install.
+**Interactive install**: on a first install the wizard asks for the same values on four pages —
+SQL Server connection (with a *Test connection* button), service account and optional master-key
+password, HTTPS certificate (store thumbprint or PFX file) and listen URL, recovery mode (single key
+or Shamir shares) with an acknowledgement that the recovery file will be copied and deleted. Each
+page validates on *Next* with the rules `WriteMachineConfig` and `RunInit` apply. The recovery
+material is still written to a file, not shown on screen (see below), and the finish page says so.
+On an upgrade the pages are skipped. The pages are authored in the `.aip` but have not yet been seen
+in the Advanced Installer designer or in a built MSI (`setups/AdvancedInstaller/README.md`,
+"Dialogs"); the silent install is the path that has been exercised.
 
 **Silent install**:
 
@@ -124,8 +127,8 @@ msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log `
 5. Registers the `KarmasisMiniVault` service (running as `MV_SERVICEACCOUNT`, with
    `MV_SERVICEACCOUNT_PASSWORD` when that account needs one) **and starts it**. A successful
    installation therefore leaves a running service, not just a registered one.
-6. (Not sequenced into the install; available as a "Test connection" action once the designer pages
-   exist.) Tests the connection string in `MV_CONNECTIONSTRING` and reports back via `MV_SQL_OK`/`MV_SQL_ERROR`.
+6. (Not sequenced into the install; run by the *Test connection* button on the SQL page.) Tests the
+   connection string in `MV_CONNECTIONSTRING` and reports back via `MV_SQL_OK`/`MV_SQL_ERROR`.
 
 The recovery material is written to `%ProgramData%\MiniVault\recovery-<timestamp>.txt` (a deferred
 custom action cannot show it in the UI). **Open that file, copy the recovery key or shares to a safe

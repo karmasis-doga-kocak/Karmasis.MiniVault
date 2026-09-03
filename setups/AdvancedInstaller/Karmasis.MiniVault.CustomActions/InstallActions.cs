@@ -273,12 +273,63 @@ namespace Karmasis.MiniVault.CustomActions
                     }
                 }
 
+                // The recovery options are what RunInit hands to 'minivault.exe init'. Checking them here, with the
+                // same rule MiniVaultCli applies, fails a bad MV_RECOVERY / MV_SHARES / MV_THRESHOLD before
+                // InstallInitialize instead of halfway through the install. RecoveryDlg checks the ranges too, but
+                // "threshold <= shares" needs a numeric comparison of two properties that MSI conditions cannot
+                // express, and a silent install never sees the dialog at all.
+                var recoveryError = DescribeRecoveryOptionsError(
+                    session.GetProperty("MV_RECOVERY"), session.GetProperty("MV_SHARES"), session.GetProperty("MV_THRESHOLD"));
+                if (recoveryError != null)
+                {
+                    session.SendMessage("MiniVault: " + recoveryError, InstallMessage.ERROR);
+                    return (int)ActionResult.Failure;
+                }
+
                 return (int)ActionResult.Success;
             }
             catch (Exception ex)
             {
                 session.SendMessage("MiniVault: property validation failed: " + ex.Message, InstallMessage.ERROR);
                 return (int)ActionResult.Failure;
+            }
+        }
+
+        /// <summary>
+        /// Null when MV_RECOVERY / MV_SHARES / MV_THRESHOLD would be accepted by 'minivault.exe init', otherwise the
+        /// message to fail the installation with. Shares and threshold are only looked at for shamir; an empty
+        /// recovery mode means single, exactly as <see cref="MiniVaultCli.BuildInitArguments"/> treats it.
+        /// </summary>
+        internal static string DescribeRecoveryOptionsError(string recovery, string shares, string threshold)
+        {
+            var mode = string.IsNullOrEmpty(recovery) ? "single" : recovery.Trim().ToLowerInvariant();
+            if (mode != "single" && mode != "shamir")
+            {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "MV_RECOVERY must be 'single' or 'shamir' (got '{0}').", recovery);
+            }
+
+            var sharesValue = 0;
+            var thresholdValue = 0;
+            if (mode == "shamir")
+            {
+                if (!int.TryParse((shares ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out sharesValue)
+                    || !int.TryParse((threshold ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out thresholdValue))
+                {
+                    return string.Format(CultureInfo.InvariantCulture,
+                        "MV_SHARES and MV_THRESHOLD must be whole numbers for shamir recovery (got shares='{0}', threshold='{1}').",
+                        shares, threshold);
+                }
+            }
+
+            try
+            {
+                MiniVaultCli.BuildInitArguments(mode, sharesValue, thresholdValue, null, "validate-only");
+                return null;
+            }
+            catch (ArgumentException ex)
+            {
+                return ex.Message;
             }
         }
 

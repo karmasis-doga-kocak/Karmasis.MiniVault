@@ -21,7 +21,9 @@ schema used by
 (Advanced Installer 22.8). `verify-aip.ps1` checks everything that can be checked without the
 product: XML well-formedness, the presence of the components the setup relies on, the custom
 action rows and their binaries, and that every source path in the project resolves to a file that
-exists after a publish. The custom-actions assembly **is** built and unit-tested here.
+exists after a publish, plus the configuration dialogs (section 6). The custom-actions assembly
+**is** built and unit-tested here; the dialogs are authored in the XML (see "Dialogs") and have not
+been rendered yet.
 
 Expect the first designer session to normalize the file: Advanced Installer rewrites the `.aip`
 on save, materializes the standard dialog control rows out of the fragments, and regenerates
@@ -126,8 +128,8 @@ succeeds offline with the repo's own `nuget.config`.
 
 `TestSqlConnection` (immediate, unsequenced) is there for a "Test connection" button: it opens the
 connection string in `MV_CONNECTIONSTRING` with a 5-second timeout and sets `MV_SQL_OK` to `1` or
-`0` plus `MV_SQL_ERROR`. It never fails an installation. Nothing calls it yet — see the designer
-follow-ups.
+`0` plus `MV_SQL_ERROR`. It never fails an installation. The *Test connection* button on `SqlDlg`
+runs it (see "Dialogs").
 
 There is no .NET Framework launch condition: the server publishes self-contained, so nothing has to
 be installed on the target machine first.
@@ -193,7 +195,7 @@ survive the `NAME="value"` list untouched.
 
 ## Unattended install
 
-Until the configuration pages exist, this is *the* way to install:
+For scripted or automated hosts, and for any install that should not show the wizard:
 
 ```powershell
 msiexec /i Karmasis.MiniVault.msi /qn /l*v minivault-install.log `
@@ -261,29 +263,64 @@ Uninstalling is not decommissioning. To retire a host for good, after the MSI un
    will use it.
 4. Remove the server certificate from `LocalMachine\My` if it was imported for MiniVault only.
 
-## Designer follow-ups
+## Dialogs
 
-These need the Advanced Installer designer and are deliberately **not** authored in the XML — the
-Collector project has no custom pages to adapt, so hand-writing the `MsiControlComponent` /
-`MsiControlEventComponent` rows for four new dialogs would have been guesswork.
+On a first install the wizard runs `WelcomeDlg → FolderDlg → SqlDlg → ServiceDlg → TlsDlg →
+RecoveryDlg → VerifyReadyDlg → ProgressDlg → ExitDialog`. The four configuration pages are authored
+in the `.aip` (`MsiDialogComponent`, `MsiControlComponent`, `MsiControlConditionComponent`,
+`MsiControlEventComponent`, `MsiCheckBoxComponent`), modelled on the designer-made pages in
+`Karmasis.Classic.InfraskopeServer` (`ConfigureDlg`, `EsUrlVerifyDlg`) and
+`Karmasis.Classic.InfraskopeWebService` (`DatabaseServerDlg`, `MSMQServerDlg`). On a major upgrade
+(`OLDPRODUCTS` set) they are skipped and `FolderDlg` goes straight to `VerifyReadyDlg`; a silent
+install never shows them and takes the same `MV_*` properties from the command line.
 
-1. **`SqlDlg`** — edit control bound to `MV_CONNECTIONSTRING`, plus a *Test connection* push button
-   whose `DoAction` event runs `TestSqlConnection`, and a text control showing `[MV_SQL_ERROR]`
-   conditioned on `MV_SQL_OK = "0"`.
-2. **`MasterKeyDlg`** — optional masked edit bound to `MV_MASTERKEY`, and an edit for
-   `MV_SERVICEACCOUNT`.
-3. **`TlsDlg`** — `MV_URL`, a radio group choosing PFX vs. store, `MV_CERT_PATH` (with a browse
-   button), masked `MV_CERT_PASSWORD`, `MV_CERT_THUMBPRINT`.
-4. **`RecoveryDlg`** — radio group for `MV_RECOVERY` (`single` / `shamir`) with `MV_SHARES` and
-   `MV_THRESHOLD` enabled only for `shamir`, and a finish-page note pointing at
-   `%ProgramData%\MiniVault\recovery-*.txt`.
+| Page | Inputs | Next-button checks |
+| --- | --- | --- |
+| `SqlDlg` | `MV_CONNECTIONSTRING` (multi-line edit); *Test connection* runs `TestSqlConnection` and shows "Connection succeeded." or `[MV_SQL_ERROR]`. | connection string not empty |
+| `ServiceDlg` | `MV_SERVICEACCOUNT` (default `LocalSystem`), `MV_SERVICEACCOUNT_PASSWORD`; check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | empty account → `LocalSystem`; with the box ticked the password is required and must match; unticked clears both |
+| `TlsDlg` | `MV_URL`, `MV_CERT_THUMBPRINT`; check box *Use a PFX file* → `MV_CERT_PATH`, `MV_CERT_PASSWORD`. | URL not empty; exactly one certificate source (the other mode's properties are cleared on Next, so `MachineConfigWriter` never sees both) |
+| `RecoveryDlg` | check box *Split into Shamir shares* bound to `MV_RECOVERY` (ticked = `shamir`, unticked = cleared = single), `MV_SHARES`, `MV_THRESHOLD` (integer edits); acknowledgement check box `MV_RECOVERY_ACK`. | acknowledgement ticked; for shamir, shares and threshold each within 2..255 |
+| `VerifyReadyDlg` | adds a summary (service account, URL, certificate, recovery mode) on a first install; the connection string is not repeated because it may hold a password. | — |
+| `ExitDialog` | adds the "open `recovery-<timestamp>.txt`, store it offline, delete it, grant the SQL login" note on a first install. | — |
 
-Insert them between `FolderDlg` and `VerifyReadyDlg` in the install sequence, and add validation so
-`Next` is disabled while `MV_CONNECTIONSTRING` is empty or neither certificate property is set —
-`WriteMachineConfig` rejects both cases, but failing in the UI is friendlier than failing mid-install.
+A failed check sets `MV_UI_ERROR` and spawns `MvErrorDlg` (a small OK box) instead of moving on;
+the `NewDialog` event carries the complementary condition. This deliberately avoids depending on
+control conditions being re-evaluated while the user types: MSI evaluates `ControlCondition` rows
+when a page is built, so the pages also raise `[AiRefreshDlg]=1` from their check boxes and the
+test button to have Advanced Installer rebuild the page and apply the Enable/Disable rules.
 
-Also worth doing in the designer: set `ARPPRODUCTICON` from `img/ds-48.ico` (the file is committed
-but not yet referenced), and replace the Collector's bitmaps with MiniVault artwork.
+`threshold <= shares` is the one rule the dialog cannot express (MSI conditions compare two
+properties as strings), so `ValidateProperties` — immediate, before `InstallInitialize` — checks the
+recovery trio with the same rule `MiniVaultCli.BuildInitArguments` applies. That also covers silent
+installs, which never see the page.
+
+UI-only properties: `MV_MASTERKEY_USEPASSWORD`, `MV_MASTERKEY_CONFIRM` (hidden from the log like
+`MV_MASTERKEY`), `MV_CERT_USEPFX`, `MV_RECOVERY_ACK`, `MV_UI_ERROR`. None of them reaches a custom
+action; the existing `MV_*` contract is unchanged.
+
+### What the first designer session has to verify
+
+The rows were written without the product, so the first time the `.aip` is opened in Advanced
+Installer, check these before building — `verify-aip.ps1` section 6 covers only what can be checked
+statically:
+
+1. **Sequence override.** The theme fragment still has `FolderDlg.Next → VerifyReadyDlg` and
+   `VerifyReadyDlg.Back → FolderDlg` at ordering 201; ours run at 202/203 and rely on the last
+   `NewDialog` winning (the same pattern the designer produced in InfraskopeServer). If the designer
+   shows both targets on `FolderDlg.Next`, delete the fragment's row or give it the `OLDPRODUCTS`
+   condition.
+2. **`[AiRefreshDlg]` from a check box.** Used to re-apply the Enable/Disable conditions after a
+   check box is toggled. If it has no effect, the dependent edits simply stay enabled — the Next
+   checks still hold — but it is worth confirming.
+3. **Text on `VerifyReadyDlg` / `ExitDialog`.** The summary rows start at y=115 and the exit note at
+   x=135, y=105, assumed from the classic theme's layout; adjust if they overlap the standard text.
+4. **Integer edits.** `MV_SHARES` / `MV_THRESHOLD` use the Integer attribute (19); the range
+   conditions compare a property with an integer literal, which MSI evaluates numerically.
+5. `ARPPRODUCTICON` from `img/ds-48.ico` (committed, not yet referenced) and MiniVault artwork in
+   place of the Collector bitmaps.
+
+There is no file-browse button for the PFX path: the classic theme has no reusable file dialog and a
+browse control would need `AI_` custom actions that this project does not ship. The path is typed.
 
 ## Tests
 
@@ -296,8 +333,14 @@ but not yet referenced), and replace the Collector's bitmaps with MiniVault artw
 * `MiniVaultCli.BuildInitArguments` — `single`, `shamir`, `--master-key`, and the argument
   validation.
 * `InstallActions` — `WriteMachineConfig` writing and protecting the folder, `RunInit` argument
-  building and error reporting through a fake process runner, and `TestSqlConnection` against an
-  unreachable server.
+  building and error reporting through a fake process runner, `ValidateProperties` (double quotes,
+  and the `MV_RECOVERY` / `MV_SHARES` / `MV_THRESHOLD` rule including `threshold <= shares`), and
+  `TestSqlConnection` against an unreachable server.
+
+The dialogs themselves have no unit tests; `verify-aip.ps1` section 6 checks the rows statically
+(declared dialogs and chrome, unique control keys, bound properties declared, password edits hidden,
+check boxes in the CheckBox table, events resolving to known dialogs/actions, the page-to-page
+navigation both ways, and the test-button event sequence).
 
 They run against a `FakeMsiSession` implementing the kit's `IMsiSession`, so no MSI session handle
 is needed.

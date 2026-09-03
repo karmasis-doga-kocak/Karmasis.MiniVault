@@ -443,6 +443,149 @@ foreach ($row in @($components['caphyon.advinst.msicomp.MsiServCtrlComponent'].R
 }
 
 # ---------------------------------------------------------------------------
+# 6. Configuration dialogs
+# ---------------------------------------------------------------------------
+Write-Section '6. Configuration dialogs'
+
+# Dialogs the theme fragments provide (not declared in this file) that our rows may reference.
+$fragmentDialogs = @('WelcomeDlg', 'LicenseAgreementDlg', 'FolderDlg', 'VerifyReadyDlg', 'ExitDialog', 'CancelDlg',
+    'ProgressDlg', 'MaintenanceWelcomeDlg', 'MaintenanceTypeDlg', 'VerifyRemoveDlg', 'VerifyRepairDlg', 'CustomizeDlg')
+
+$ownDialogs = @()
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiDialogComponent')) {
+    $ownDialogs = @($components['caphyon.advinst.msicomp.MsiDialogComponent'].ROW | ForEach-Object { $_.Dialog })
+}
+$controlRows = @()
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiControlComponent')) {
+    $controlRows = @($components['caphyon.advinst.msicomp.MsiControlComponent'].ROW)
+}
+$eventRows = @()
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiControlEventComponent')) {
+    $eventRows = @($components['caphyon.advinst.msicomp.MsiControlEventComponent'].ROW)
+}
+$conditionRows = @()
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiControlConditionComponent')) {
+    $conditionRows = @($components['caphyon.advinst.msicomp.MsiControlConditionComponent'].ROW)
+}
+$checkBoxRows = @()
+if ($components.ContainsKey('caphyon.advinst.msicomp.MsiCheckBoxComponent')) {
+    $checkBoxRows = @($components['caphyon.advinst.msicomp.MsiCheckBoxComponent'].ROW)
+}
+
+foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg', 'MvErrorDlg')) {
+    if ($ownDialogs -contains $dialog) { Write-Ok "dialog declared: $dialog" } else { Write-Fail "dialog not declared: $dialog" }
+}
+
+function Test-ControlExists {
+    param([string]$Dialog, [string]$Control)
+    return @($controlRows | Where-Object { $_.Dialog_ -eq $Dialog -and $_.Control -eq $Control }).Count -eq 1
+}
+
+# Every page we own has the wizard chrome and its default/cancel buttons exist.
+foreach ($row in @($components['caphyon.advinst.msicomp.MsiDialogComponent'].ROW)) {
+    foreach ($required in @($row.Control_Default, $row.Control_Cancel)) {
+        if (-not (Test-ControlExists $row.Dialog $required)) {
+            Write-Fail "dialog '$($row.Dialog)' names control '$required' as default/cancel but has no such control"
+        }
+    }
+    if ($row.Dialog -ne 'MvErrorDlg') {
+        foreach ($required in @('Back', 'Next', 'Cancel', 'Title', 'BannerBitmap', 'BannerLine', 'BottomLine')) {
+            if (-not (Test-ControlExists $row.Dialog $required)) {
+                Write-Fail "dialog '$($row.Dialog)' has no '$required' control"
+            }
+        }
+    }
+}
+Write-Ok "every declared dialog has its chrome, default and cancel controls (unless reported above)"
+
+# Controls: unique keys, bound properties declared, check boxes listed in the CheckBox table.
+$controlKeys = @{}
+foreach ($row in $controlRows) {
+    $key = "$($row.Dialog_)#$($row.Control)"
+    if ($controlKeys.ContainsKey($key)) { Write-Fail "duplicate control: $key" }
+    $controlKeys[$key] = $true
+
+    $bound = if ($row.PSObject.Properties.Name -contains 'Property') { $row.Property } else { '' }
+    if ($bound) {
+        if (-not $properties.ContainsKey($bound)) {
+            Write-Fail "control $key binds undeclared property $bound"
+        }
+        if ($row.Type -eq 'CheckBox' -and @($checkBoxRows | Where-Object { $_.Property -eq $bound }).Count -ne 1) {
+            Write-Fail "check box $key has no CheckBox-table row for $bound (its ticked value would be undefined)"
+        }
+        if ($row.Type -eq 'Edit' -and ([int]$row.Attributes -band 0x200000) -and ($hiddenProperties -notcontains $bound)) {
+            Write-Fail "password edit $key binds $bound, which is not in MsiHiddenProperties"
+        }
+    }
+}
+Write-Ok "$($controlRows.Count) control rows: keys unique, bound properties declared, password edits hidden (unless reported above)"
+
+# Events: dialog/control pairs exist (for our dialogs), NewDialog targets exist, DoAction targets are custom actions.
+$customActionNames = @($customActions | ForEach-Object { $_.Action })
+foreach ($row in $eventRows) {
+    $key = "$($row.Dialog_)#$($row.Control_)"
+    if (($ownDialogs -contains $row.Dialog_) -and -not (Test-ControlExists $row.Dialog_ $row.Control_)) {
+        Write-Fail "control event on missing control: $key"
+    }
+    if (($fragmentDialogs -notcontains $row.Dialog_) -and ($ownDialogs -notcontains $row.Dialog_)) {
+        Write-Fail "control event on unknown dialog: $key"
+    }
+    switch ($row.Event) {
+        'NewDialog'   { if (($ownDialogs -notcontains $row.Argument) -and ($fragmentDialogs -notcontains $row.Argument)) { Write-Fail "$key -> NewDialog '$($row.Argument)': no such dialog" } }
+        'SpawnDialog' { if (($ownDialogs -notcontains $row.Argument) -and ($fragmentDialogs -notcontains $row.Argument)) { Write-Fail "$key -> SpawnDialog '$($row.Argument)': no such dialog" } }
+        'DoAction'    { if ($customActionNames -notcontains $row.Argument) { Write-Fail "$key -> DoAction '$($row.Argument)': no such custom action" } }
+        default {
+            if ($row.Event -match '^\[(.+)\]$') {
+                $target = $Matches[1]
+                if ($target -ne 'AiRefreshDlg' -and -not $properties.ContainsKey($target)) {
+                    Write-Fail "$key sets undeclared property $target"
+                }
+            }
+        }
+    }
+}
+Write-Ok "$($eventRows.Count) control events resolve to known dialogs, controls, actions and properties (unless reported above)"
+
+# Each of our pages must be reachable and must lead on: FolderDlg -> SqlDlg -> ... -> VerifyReadyDlg, and back.
+$navigation = @(
+    @('FolderDlg', 'SqlDlg'), @('SqlDlg', 'ServiceDlg'), @('ServiceDlg', 'TlsDlg'), @('TlsDlg', 'RecoveryDlg'), @('RecoveryDlg', 'VerifyReadyDlg'),
+    @('VerifyReadyDlg', 'RecoveryDlg'), @('RecoveryDlg', 'TlsDlg'), @('TlsDlg', 'ServiceDlg'), @('ServiceDlg', 'SqlDlg'), @('SqlDlg', 'FolderDlg')
+)
+foreach ($hop in $navigation) {
+    if (@($eventRows | Where-Object { $_.Dialog_ -eq $hop[0] -and $_.Event -eq 'NewDialog' -and $_.Argument -eq $hop[1] }).Count -ge 1) {
+        Write-Ok "navigation: $($hop[0]) -> $($hop[1])"
+    } else {
+        Write-Fail "navigation missing: $($hop[0]) -> $($hop[1])"
+    }
+}
+
+# Every Next button of ours that can refuse must have a NewDialog with a condition (never unconditional) so the
+# validation events actually gate it.
+foreach ($dialog in @('SqlDlg', 'ServiceDlg', 'TlsDlg', 'RecoveryDlg')) {
+    $next = @($eventRows | Where-Object { $_.Dialog_ -eq $dialog -and $_.Control_ -eq 'Next' -and $_.Event -eq 'NewDialog' })
+    if ($next.Count -ne 1 -or $next[0].Condition -eq '1' -or [string]::IsNullOrWhiteSpace($next[0].Condition)) {
+        Write-Fail "$dialog.Next must have exactly one conditional NewDialog"
+    }
+}
+
+# The SQL test button drives TestSqlConnection through its data setter and refreshes the page.
+$testEvents = @($eventRows | Where-Object { $_.Dialog_ -eq 'SqlDlg' -and $_.Control_ -eq 'TestButton' } | Sort-Object { [int]$_.Ordering })
+$testSequence = @($testEvents | ForEach-Object { if ($_.Event -eq 'DoAction') { $_.Argument } else { $_.Event } }) -join ' > '
+if ($testSequence -eq 'AI_DATA_SETTER_2 > TestSqlConnection > [AiRefreshDlg]') {
+    Write-Ok "SqlDlg.TestButton: $testSequence"
+} else {
+    Write-Fail "SqlDlg.TestButton events are '$testSequence'; expected 'AI_DATA_SETTER_2 > TestSqlConnection > [AiRefreshDlg]'"
+}
+
+# Control conditions reference existing controls.
+foreach ($row in $conditionRows) {
+    if (($ownDialogs -contains $row.Dialog_) -and -not (Test-ControlExists $row.Dialog_ $row.Control_)) {
+        Write-Fail "control condition on missing control: $($row.Dialog_)#$($row.Control_)"
+    }
+}
+Write-Ok "$($conditionRows.Count) control conditions reference existing controls (unless reported above)"
+
+# ---------------------------------------------------------------------------
 Write-Host ''
 if ($script:failures.Count -eq 0) {
     Write-Host 'verify-aip: OK' -ForegroundColor Green
