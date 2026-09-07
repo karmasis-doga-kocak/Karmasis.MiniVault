@@ -102,6 +102,56 @@ namespace Karmasis.MiniVault.CustomActions.Tests
             }
         }
 
+        /// <summary>The path the operator picked (MV_CERT_PATH) may be a share or a download folder that is
+        /// moved or cleaned up later. The service must not depend on it, so the file is copied under the
+        /// protected folder and appsettings.json points at the copy.</summary>
+        [Fact]
+        public void WriteMachineConfig_WithAPfx_CopiesItIntoProgramDataAndPointsAppSettingsAtTheCopy()
+        {
+            using (var source = new TempDirectory())
+            using (var directory = new TempDirectory())
+            {
+                var sourcePath = source.File("minivault.pfx");
+                File.WriteAllText(sourcePath, "pfx-bytes");
+
+                // Runs as the current account, because appsettings.json and the copy are read back below.
+                var session = new FakeMsiSession(string.Format(
+                    "MV_CONNECTIONSTRING=\"Server=sql01;Database=MiniVault;Integrated Security=true\", " +
+                    "MV_SERVICEACCOUNT=\"{0}\", MV_URL=\"https://0.0.0.0:8200\", MV_PROGRAMDATA=\"{1}\", " +
+                    "MV_CERT_PATH=\"{2}\", MV_CERT_PASSWORD=\"pw\"",
+                    WindowsIdentity.GetCurrent().Name, directory.Path, sourcePath));
+
+                InstallActions.WriteMachineConfig(session).ShouldBe((int)ActionResult.Success);
+
+                var copy = directory.File("minivault.pfx");
+                File.ReadAllText(copy).ShouldBe("pfx-bytes");
+
+                var json = File.ReadAllText(directory.File("appsettings.json"));
+                json.ShouldContain("\"Path\": \"" + copy.Replace("\\", "\\\\") + "\"");
+                json.ShouldNotContain(sourcePath.Replace("\\", "\\\\"));
+
+                session.HasMessage(InstallMessage.ERROR).ShouldBeFalse();
+                session.LastMessage(InstallMessage.INFO).ShouldContain(copy);
+            }
+        }
+
+        [Fact]
+        public void WriteMachineConfig_WithAMissingPfx_FailsWithAnErrorNamingThePath()
+        {
+            using (var directory = new TempDirectory())
+            {
+                var missing = directory.File("nowhere.pfx");
+                var session = new FakeMsiSession(CustomActionData(
+                    directory.Path, @"C:\Program Files\Karmasis\MiniVault",
+                    ", MV_CERT_PATH=\"" + missing + "\", MV_CERT_PASSWORD=\"pw\""));
+
+                InstallActions.WriteMachineConfig(session).ShouldBe((int)ActionResult.Failure);
+
+                session.LastMessage(InstallMessage.ERROR).ShouldContain(missing);
+                File.Exists(directory.File("appsettings.json")).ShouldBeFalse();
+            }
+        }
+
         /// <summary>An upgrade re-runs WriteMachineConfig with whatever properties msiexec was given - the
         /// defaults, when it was started from Add/Remove Programs. The existing configuration must survive that.
         /// </summary>

@@ -202,7 +202,7 @@ written to the MSI verbose log.
 | `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
 | `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
 | `MV_MASTERKEY` | *(empty)* | Optional: derive the master key from this password instead of generating one. |
-| `MV_CERT_PATH` | *(empty)* | PFX path. Exactly one of this or `MV_CERT_THUMBPRINT`. |
+| `MV_CERT_PATH` | *(empty)* | PFX path. `WriteMachineConfig` copies the file into `%ProgramData%\MiniVault\` (same file name) and `appsettings.json` points at the copy, so the original can be moved or deleted afterwards; a path that does not exist fails the install. Exactly one of this or `MV_CERT_THUMBPRINT`. |
 | `MV_CERT_PASSWORD` | *(empty)* | PFX password. Stored in plain text in `appsettings.json`. |
 | `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. Spaces and the certmgr left-to-right mark are stripped. |
 | `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
@@ -325,7 +325,7 @@ install never shows them and takes the same `MV_*` properties from the command l
 | --- | --- | --- |
 | `SqlDlg` | Laid out like SSMS's connect dialog: *Server name* (`MV_SQL_SERVER`), *Database* (`MV_SQL_DATABASE`, default `MiniVault`), *Authentication* drop-down list (`MV_SQL_AUTH` = `windows` / `sql`, `ComboBox` table), *Login* / *Password* (`MV_SQL_USER`, `MV_SQL_PASSWORD`; enabled for `sql` only, by `ControlCondition`), *Encrypt connection* (`MV_SQL_ENCRYPT`, default on), *Trust server certificate* (`MV_SQL_TRUSTCERT`). `BuildConnectionString` composes `MV_CONNECTIONSTRING` from them whenever a check box changes, on *Test connection* and on *Next*; the composed string is shown read-only at the bottom. *Enter the connection string directly (advanced)* (`MV_SQL_ADVANCED`) disables the fields and makes that edit writable instead. *Test connection* then runs `TestSqlConnection` and shows `MV_SQL_RESULT` in a message box. | server name (or, in advanced mode, the string) not empty; a login for SQL Server Authentication |
 | `ServiceDlg` | *Service account* drop-down list (`MV_SERVICEACCOUNT_KIND` = `LocalSystem` / `NetworkService` / `Custom`); *Account* and *Account password* (`MV_SERVICEACCOUNT`, `MV_SERVICEACCOUNT_PASSWORD`; enabled for `Custom` only, by `ControlCondition`); check box *Derive the master key from a password* → `MV_MASTERKEY` + confirmation (`MV_MASTERKEY_CONFIRM`). | Next writes `LocalSystem` / `NT AUTHORITY\NetworkService` into `MV_SERVICEACCOUNT` and clears the password for the built-in choices; `Custom` needs a real account (not one of the built-in names); with the master-key box ticked the password is required and must match, unticked clears both |
-| `TlsDlg` | `MV_URL`, `MV_CERT_THUMBPRINT`; check box *Use a PFX file* → `MV_CERT_PATH`, `MV_CERT_PASSWORD`. | URL not empty; exactly one certificate source (the other mode's properties are cleared on Next, so `MachineConfigWriter` never sees both) |
+| `TlsDlg` | `MV_URL`, `MV_CERT_THUMBPRINT`; check box *Use a PFX file* → `MV_CERT_PATH` (typed, or picked with *Browse...*, see below), `MV_CERT_PASSWORD`. | URL not empty; exactly one certificate source (the other mode's properties are cleared on Next, so `MachineConfigWriter` never sees both) |
 | `RecoveryDlg` | check box *Split into Shamir shares* bound to `MV_RECOVERY` (ticked = `shamir`, unticked = cleared = single), `MV_SHARES`, `MV_THRESHOLD` (integer edits); acknowledgement check box `MV_RECOVERY_ACK`. | acknowledgement ticked; for shamir, shares and threshold each within 2..255 |
 | `VerifyReadyDlg` | adds a summary (service account, URL, certificate, recovery mode) on a first install; the connection string is not repeated because it may hold a password. | — |
 | `ExitDialog` | adds the "open `recovery-<timestamp>.txt`, store it offline, delete it, grant the SQL login" note on a first install. | — |
@@ -411,8 +411,13 @@ Still to check when someone opens the project in the designer or runs the MSI:
    place of the Collector bitmaps.
 4. A real install on a test VM: the pre-production checklist in `docs/operations.md`.
 
-There is no file-browse button for the PFX path: the classic theme has no reusable file dialog and a
-browse control would need `AI_` custom actions that this project does not ship. The path is typed.
+The PFX path has a *Browse...* button. It uses Advanced Installer's predefined `BrowseForFile`
+custom action (`aicustact.dll`, which the `AI_*` actions already put in the Binary table; an
+Enterprise-edition feature): the button sets `AI_OFN_FILTERS` (`*.pfx;*.p12`) and
+`AI_OFN_DLG_TITLE`, seeds `AI_OFN_FILEPATH` with the current `MV_CERT_PATH`, runs the action, and
+copies `AI_OFN_FILEPATH` back into `MV_CERT_PATH` unless the dialog was cancelled (the property is
+then empty). The dialog is opened with `OFN_FILEMUSTEXIST`, so an existing file is the only thing
+it can return; the edit box still accepts a typed path.
 
 ## Tests
 

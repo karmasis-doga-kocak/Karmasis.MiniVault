@@ -117,13 +117,22 @@ namespace Karmasis.MiniVault.CustomActions
                 // The connection string goes to disk DPAPI-protected (LocalMachine), never in clear text: a SQL
                 // login's password would otherwise sit in appsettings.json guarded only by the folder ACL. The
                 // action runs on the target machine, which is what binds the value to it.
+                // The PFX goes under the protected folder too: the path the operator picked may be moved or
+                // cleaned up later, and the server loads the file on every start. The copy inherits the ACL
+                // applied below, so the service account can read it without a separate grant.
+                var certificatePath = NullIfBlank(model.CertificatePath);
+                if (certificatePath != null)
+                {
+                    certificatePath = CertificateFileStaging.Stage(certificatePath, programDataDir);
+                }
+
                 var config = new MachineConfig
                 {
                     ConnectionString = model.ConnectionString,
                     ProtectedConnectionString = string.IsNullOrEmpty(model.ConnectionString) ? null : ConfigProtection.Protect(model.ConnectionString),
                     MasterKeyProvider = MachineConfigWriter.DefaultMasterKeyProvider,
                     Url = model.Url,
-                    CertificatePath = NullIfBlank(model.CertificatePath),
+                    CertificatePath = certificatePath,
                     CertificatePassword = model.CertificatePassword,
                     CertificateThumbprint = NullIfBlank(model.CertificateThumbprint)
                 };
@@ -133,8 +142,10 @@ namespace Karmasis.MiniVault.CustomActions
 
                 session.SendMessage(
                     string.Format(CultureInfo.InvariantCulture,
-                        "MiniVault: wrote {0} and applied a protected ACL ({1}).",
-                        configPath, string.Join(" ", DirectoryAcl.DescribeGrants(model.ServiceAccount))),
+                        "MiniVault: wrote {0}{1} and applied a protected ACL ({2}).",
+                        configPath,
+                        certificatePath == null ? string.Empty : " (PFX at " + certificatePath + ")",
+                        string.Join(" ", DirectoryAcl.DescribeGrants(model.ServiceAccount))),
                     InstallMessage.INFO);
 
                 return (int)ActionResult.Success;

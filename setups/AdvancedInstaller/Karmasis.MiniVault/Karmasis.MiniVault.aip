@@ -939,16 +939,17 @@
     <ROW Dialog_="TlsDlg" Control="BannerLine" Type="Line" X="0" Y="44" Width="372" Height="0" Attributes="1" Order="400"/>
     <ROW Dialog_="TlsDlg" Control="UrlLabel" Type="Text" X="12" Y="57" Width="120" Height="10" Attributes="3" Text="&amp;Listen URL:" Order="500"/>
     <ROW Dialog_="TlsDlg" Control="UrlEdit" Type="Edit" X="135" Y="55" Width="225" Height="16" Attributes="3" Property="MV_URL" Text="{256}" Order="600"/>
-    <ROW Dialog_="TlsDlg" Control="UrlNote" Type="Text" X="12" Y="73" Width="348" Height="12" Attributes="131075" Text="Must start with https:// and use an IP literal (0.0.0.0, ::, localhost or an address), not a DNS name." Order="700"/>
-    <ROW Dialog_="TlsDlg" Control="ThumbprintLabel" Type="Text" X="12" Y="91" Width="120" Height="10" Attributes="3" Text="Certificate &amp;thumbprint:" Order="800"/>
-    <ROW Dialog_="TlsDlg" Control="ThumbprintEdit" Type="Edit" X="135" Y="89" Width="225" Height="16" Attributes="3" Property="MV_CERT_THUMBPRINT" Text="{64}" Order="900"/>
-    <ROW Dialog_="TlsDlg" Control="ThumbprintNote" Type="Text" X="12" Y="107" Width="348" Height="22" Attributes="131075" Text="SHA-1 thumbprint of a certificate that has its private key in Local Computer \ Personal (certlm.msc). If the service account is not LocalSystem, grant it read access to that private key or the service will not start." Order="1000"/>
-    <ROW Dialog_="TlsDlg" Control="UsePfxCheck" Type="CheckBox" X="12" Y="133" Width="348" Height="14" Attributes="3" Property="MV_CERT_USEPFX" Text="Use a &amp;PFX file instead of a certificate from the store" Order="1100"/>
-    <ROW Dialog_="TlsDlg" Control="PfxPathLabel" Type="Text" X="24" Y="152" Width="108" Height="10" Attributes="3" Text="PFX &amp;file path:" Order="1200"/>
-    <ROW Dialog_="TlsDlg" Control="PfxPathEdit" Type="Edit" X="135" Y="150" Width="225" Height="16" Attributes="3" Property="MV_CERT_PATH" Text="{260}" Order="1300"/>
-    <ROW Dialog_="TlsDlg" Control="PfxPasswordLabel" Type="Text" X="24" Y="172" Width="108" Height="10" Attributes="3" Text="PFX pass&amp;word:" Order="1400"/>
-    <ROW Dialog_="TlsDlg" Control="PfxPasswordEdit" Type="Edit" X="135" Y="170" Width="225" Height="16" Attributes="2097155" Property="MV_CERT_PASSWORD" Text="{256}" Order="1500"/>
-    <ROW Dialog_="TlsDlg" Control="PfxNote" Type="Text" X="12" Y="190" Width="348" Height="40" Attributes="131075" Text="The PFX password is stored in plain text in %ProgramData%\MiniVault\appsettings.json (ACL-protected). Prefer the store thumbprint on a Windows host; use a PFX when the same certificate is deployed to several hosts. Do not use double quotes." Order="1600"/>
+    <ROW Dialog_="TlsDlg" Control="UrlNote" Type="Text" X="12" Y="73" Width="348" Height="20" Attributes="131075" Text="https:// and an IP address or localhost, not a DNS name (e.g. https://0.0.0.0:8200)." Order="700"/>
+    <ROW Dialog_="TlsDlg" Control="ThumbprintLabel" Type="Text" X="12" Y="99" Width="120" Height="10" Attributes="3" Text="Certificate &amp;thumbprint:" Order="800"/>
+    <ROW Dialog_="TlsDlg" Control="ThumbprintEdit" Type="Edit" X="135" Y="97" Width="225" Height="16" Attributes="3" Property="MV_CERT_THUMBPRINT" Text="{64}" Order="900"/>
+    <ROW Dialog_="TlsDlg" Control="ThumbprintNote" Type="Text" X="12" Y="115" Width="348" Height="30" Attributes="131075" Text="SHA-1 thumbprint of a certificate with private key in Local Computer \ Personal (certlm.msc). A service account other than LocalSystem needs read access to that key." Order="1000"/>
+    <ROW Dialog_="TlsDlg" Control="UsePfxCheck" Type="CheckBox" X="12" Y="148" Width="348" Height="12" Attributes="3" Property="MV_CERT_USEPFX" Text="Use a &amp;PFX file instead of a certificate from the store" Order="1100"/>
+    <ROW Dialog_="TlsDlg" Control="PfxPathLabel" Type="Text" X="24" Y="165" Width="108" Height="10" Attributes="3" Text="PFX &amp;file path:" Order="1200"/>
+    <ROW Dialog_="TlsDlg" Control="PfxPathEdit" Type="Edit" X="135" Y="163" Width="165" Height="16" Attributes="3" Property="MV_CERT_PATH" Text="{260}" Order="1300"/>
+    <ROW Dialog_="TlsDlg" Control="PfxBrowseButton" Type="PushButton" X="305" Y="163" Width="55" Height="16" Attributes="3" Text="B&amp;rowse..." Order="1350"/>
+    <ROW Dialog_="TlsDlg" Control="PfxPasswordLabel" Type="Text" X="24" Y="185" Width="108" Height="10" Attributes="3" Text="PFX pass&amp;word:" Order="1400"/>
+    <ROW Dialog_="TlsDlg" Control="PfxPasswordEdit" Type="Edit" X="135" Y="183" Width="225" Height="16" Attributes="2097155" Property="MV_CERT_PASSWORD" Text="{256}" Order="1500"/>
+    <ROW Dialog_="TlsDlg" Control="PfxNote" Type="Text" X="12" Y="201" Width="348" Height="30" Attributes="131075" Text="The file is copied to %ProgramData%\MiniVault (ACL-protected); its password is stored there in plain text. Prefer the store thumbprint on a Windows host. No double quotes." Order="1600"/>
     <ROW Dialog_="TlsDlg" Control="BottomLine" Type="Line" X="5" Y="234" Width="370" Height="0" Attributes="1" Order="1700"/>
     <ROW Dialog_="TlsDlg" Control="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Back]" Order="1800" TextLocId="-" Options="1"/>
     <ROW Dialog_="TlsDlg" Control="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Attributes="3" Text="[ButtonText_Next]" Order="1900" TextLocId="-" Options="1"/>
@@ -1011,6 +1012,8 @@
     <ROW Dialog_="TlsDlg" Control_="ThumbprintEdit" Action="Disable" Condition="MV_CERT_USEPFX = &quot;1&quot;"/>
     <ROW Dialog_="TlsDlg" Control_="PfxPathEdit" Action="Enable" Condition="MV_CERT_USEPFX = &quot;1&quot;"/>
     <ROW Dialog_="TlsDlg" Control_="PfxPathEdit" Action="Disable" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Action="Enable" Condition="MV_CERT_USEPFX = &quot;1&quot;"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Action="Disable" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;"/>
     <ROW Dialog_="TlsDlg" Control_="PfxPasswordEdit" Action="Enable" Condition="MV_CERT_USEPFX = &quot;1&quot;"/>
     <ROW Dialog_="TlsDlg" Control_="PfxPasswordEdit" Action="Disable" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;"/>
     <ROW Dialog_="RecoveryDlg" Control_="SharesEdit" Action="Enable" Condition="MV_RECOVERY = &quot;shamir&quot;"/>
@@ -1090,6 +1093,11 @@
     <ROW Dialog_="TlsDlg" Control_="Cancel" Event="SpawnDialog" Argument="CancelDlg" Condition="1" Ordering="100"/>
     <ROW Dialog_="TlsDlg" Control_="Back" Event="NewDialog" Argument="ServiceDlg" Condition="AI_INSTALL" Ordering="1"/>
     <ROW Dialog_="TlsDlg" Control_="UsePfxCheck" Event="[AiRefreshDlg]" Argument="1" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Event="[AI_OFN_FILTERS]" Argument="PFX files (*.pfx;*.p12)|*.pfx;*.p12|All files (*.*)|*.*" Condition="1" Ordering="1"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Event="[AI_OFN_DLG_TITLE]" Argument="Select the PFX file" Condition="1" Ordering="2"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Event="[AI_OFN_FILEPATH]" Argument="[MV_CERT_PATH]" Condition="1" Ordering="3"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Event="DoAction" Argument="BrowseForFile" Condition="1" Ordering="4"/>
+    <ROW Dialog_="TlsDlg" Control_="PfxBrowseButton" Event="[MV_CERT_PATH]" Argument="[AI_OFN_FILEPATH]" Condition="AI_OFN_FILEPATH" Ordering="5"/>
     <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_THUMBPRINT]" Argument="{}" Condition="MV_CERT_USEPFX = &quot;1&quot;" Ordering="10"/>
     <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_PATH]" Argument="{}" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;" Ordering="20"/>
     <ROW Dialog_="TlsDlg" Control_="Next" Event="[MV_CERT_PASSWORD]" Argument="{}" Condition="MV_CERT_USEPFX &lt;&gt; &quot;1&quot;" Ordering="30"/>
@@ -1189,6 +1197,7 @@
     <ROW Action="AI_DATA_SETTER_6" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.BuildConnectionString"/>
     <ROW Action="AI_DATA_SETTER_7" Type="51" Source="CustomActionData" Target="|[&amp;karmasis.minivault.customactions.dl]|Karmasis.MiniVault.CustomActions.InstallActions.ShowUiMessage"/>
     <ROW Action="ShowUiMessage" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" WithoutSeq="true" AdditionalSeq="AI_DATA_SETTER_7"/>
+    <ROW Action="BrowseForFile" Type="1" Source="aicustact.dll" Target="BrowseForFile" WithoutSeq="true"/>
     <ROW Action="BuildConnectionString" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" WithoutSeq="true" AdditionalSeq="AI_DATA_SETTER_5"/>
     <ROW Action="BuildConnectionStringSilent" Type="65" Source="DotNetMethodCaller.dll" Target="CallDotNetMethod" AdditionalSeq="AI_DATA_SETTER_6"/>
     <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>

@@ -77,7 +77,7 @@ properties (`MV_*`):
 | `MV_SHARES` | `3` | Shamir shares (>= 2, <= 255). Ignored for `single`. |
 | `MV_THRESHOLD` | `2` | Shamir threshold (>= 2, <= shares). Ignored for `single`. |
 | `MV_MASTERKEY` | *(empty)* | Optional: derive the master key from this password instead of generating one. |
-| `MV_CERT_PATH` | *(empty)* | PFX path. Exactly one of this or `MV_CERT_THUMBPRINT`. |
+| `MV_CERT_PATH` | *(empty)* | PFX path. The installer copies the file into `%ProgramData%\MiniVault\` (same file name) and `appsettings.json` points at the copy, so the original can be moved or deleted afterwards; a path that does not exist fails the install. Exactly one of this or `MV_CERT_THUMBPRINT`. |
 | `MV_CERT_PASSWORD` | *(empty)* | PFX password. Stored in plain text in `appsettings.json`. |
 | `MV_CERT_THUMBPRINT` | *(empty)* | SHA-1 thumbprint of a certificate in `LocalMachine\My`. |
 | `MV_URL` | `https://0.0.0.0:8200` | `Tls:Url`. |
@@ -658,7 +658,8 @@ Set exactly one of the two; `Tls:AllowDevelopmentCertificate` is the only way to
 ### Renewal runbook
 
 1. Get the new certificate (from your CA, or a freshly generated self-signed one for internal use).
-2. Either replace the PFX at `Tls:Certificate:Path` (same filename, same or updated password) or
+2. Either replace the PFX at `Tls:Certificate:Path` (same filename, same or updated password; for an
+   MSI install that is the copy under `%ProgramData%\MiniVault\`, not the file picked during setup) or
    import the new certificate into the store and update `Tls:Certificate:Thumbprint` to match.
 3. Restart the MiniVault service — Kestrel loads the certificate once at startup; a running server
    does not pick up a replaced file or a new thumbprint on its own.
