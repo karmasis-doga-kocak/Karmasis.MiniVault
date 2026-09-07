@@ -1,0 +1,333 @@
+{
+  "info": {
+    "name": "MiniVault",
+    "description": "MiniVault HTTP API. Set baseUrl, clientId and clientSecret in an environment, send Token first; it stores the access token in {{token}} for the other requests. See docs/api-kilavuzu.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://minivault.local:8200"
+    },
+    {
+      "key": "secretName",
+      "value": "dataskope/collector/db-password"
+    },
+    {
+      "key": "secretValuePlain",
+      "value": "P@ssw0rd-2026",
+      "description": "Plain-text value to store. The Write request base64-encodes it into secretValueBase64 before sending; leave empty to send secretValueBase64 as-is (e.g. a PFX you encoded yourself)."
+    },
+    {
+      "key": "secretValueBase64",
+      "value": "UEBzc3cwcmQtMjAyNg==",
+      "description": "Sent as the value field. Overwritten from secretValuePlain by the Write request's pre-request script when secretValuePlain is not empty."
+    },
+    {
+      "key": "secretContentType",
+      "value": "text/plain"
+    },
+    {
+      "key": "prefix",
+      "value": "dataskope/collector/"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "health"
+          ]
+        },
+        "description": "No token needed. initialized must be true before any secret request will work."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"vault initialized\", () => pm.expect(pm.response.json().initialized).to.eql(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Token",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"clientSecret\": \"{{clientSecret}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/auth/token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "auth",
+            "token"
+          ]
+        },
+        "description": "Exchanges clientId + clientSecret for a 15-minute JWT and stores it in the {{token}} environment variable. Send again after a 401 on any other request."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.environment.set(\"token\", body.accessToken);",
+              "    console.log(`token stored; expires in ${body.expiresIn} s`);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Secret - Write",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"value\": \"{{secretValueBase64}}\",\n  \"contentType\": \"{{secretContentType}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/secrets/{{secretName}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "secrets",
+            "{{secretName}}"
+          ]
+        },
+        "description": "Creates or overwrites the secret. Put the plain value in secretValuePlain; the pre-request script base64-encodes it (UTF-8) into secretValueBase64, which is what the body sends. Leave secretValuePlain empty to send secretValueBase64 as-is (binary content such as a PFX). Needs a role with write on a scope that prefixes secretName."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Postman does not base64-encode body fields on its own; the API requires value to be base64.",
+              "const plain = pm.variables.get(\"secretValuePlain\");",
+              "if (plain !== undefined && plain !== null && plain !== \"\") {",
+              "    pm.variables.set(\"secretValueBase64\", Buffer.from(String(plain), \"utf8\").toString(\"base64\"));",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) {",
+              "    const version = pm.response.json().version;",
+              "    pm.environment.set(\"etag\", `\"${version}\"`);",
+              "    console.log(`written as version ${version}`);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Secret - Read",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/secrets/{{secretName}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "secrets",
+            "{{secretName}}"
+          ]
+        },
+        "description": "Returns the secret with value base64-encoded. The post-response script decodes it to the Postman Console and stores the ETag for the conditional read."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    const plain = Buffer.from(body.value, \"base64\").toString(\"utf8\");",
+              "    pm.environment.set(\"etag\", pm.response.headers.get(\"ETag\"));",
+              "    console.log(`${body.name} (version ${body.version}, ${body.contentType}): ${plain}`);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Secret - Read (If-None-Match)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "If-None-Match",
+            "value": "{{etag}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/secrets/{{secretName}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "secrets",
+            "{{secretName}}"
+          ]
+        },
+        "description": "Conditional read. Sends the ETag saved by the last Read or Write; expects 304 Not Modified while the secret is unchanged, 200 with the new value after a write."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"304 (unchanged) or 200 (changed)\", () => pm.expect(pm.response.code).to.be.oneOf([200, 304]));",
+              "console.log(pm.response.code === 304 ? \"unchanged\" : `changed: now version ${pm.response.json().version}`);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Secret - List",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/secrets?prefix={{prefix}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "secrets"
+          ],
+          "query": [
+            {
+              "key": "prefix",
+              "value": "{{prefix}}",
+              "description": "Secret-name prefix. Untick for the whole vault (needs a role granted with --all)."
+            }
+          ]
+        },
+        "description": "Lists names, versions and update times under the prefix; never returns values. The role must cover the prefix itself, so a prefix wider than the role's scope is a 403."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) console.log(`${pm.response.json().length} secret(s)`);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Secret - Delete",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/secrets/{{secretName}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "secrets",
+            "{{secretName}}"
+          ]
+        },
+        "description": "Deletes the secret permanently (204). Not reversible; a second delete is a 404."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

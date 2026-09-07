@@ -183,6 +183,8 @@ elevated Windows host, on a machine with Advanced Installer, on a CI agent, and 
 - `docs/operations.md` — installation, CLI reference, master key providers, backup and restore, TLS, the HTTP API, upgrading, troubleshooting, pre-production checklist.
 - `docs/client.md` — the client library: setup, cache, background refresh, errors, TLS pinning.
 - `docs/design.md` — the V1 design specification (Turkish).
+- `docs/saha-kilavuzu.md` — field guide for operators: every CLI command with examples and step-by-step scenarios (Turkish).
+- `docs/api-kilavuzu.md` — HTTP API guide for Postman and curl users: every endpoint with request, response and error examples, plus an importable `docs/minivault.postman_collection.json` (Turkish).
 - `deploy/windows/README.md`, `docker/README.md`, `setups/AdvancedInstaller/README.md` — per-target deployment notes.
 
 ## CI

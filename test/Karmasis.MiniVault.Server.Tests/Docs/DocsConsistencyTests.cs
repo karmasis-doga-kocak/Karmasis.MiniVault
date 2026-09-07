@@ -16,7 +16,7 @@ namespace Karmasis.MiniVault.Server.Tests.Docs;
 public class DocsConsistencyTests
 {
     /// <summary>The docs that describe the server's own interface. Everything else (deployment notes) is prose.</summary>
-    private static readonly string[] DocumentPaths = ["README.md", "docs/operations.md", "docs/client.md"];
+    private static readonly string[] DocumentPaths = ["README.md", "docs/operations.md", "docs/client.md", "docs/saha-kilavuzu.md", "docs/api-kilavuzu.md", "docs/minivault.postman_collection.json"];
 
     /// <summary><c>minivault &lt;word&gt;</c> — the word right after the binary name, in an example or in prose.
     /// Case-sensitive on purpose: "MiniVault initialized." in a sample output is not a command invocation.</summary>
