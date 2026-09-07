@@ -1656,10 +1656,6 @@
     <ROW Condition="(VersionNT &gt;= 603)" Description="[ProductName] requires Windows 8.1 / Windows Server 2012 R2 or later." Builds="DefaultBuild"/>
     <ROW Condition="VersionNT64" Description="[ProductName] can only be installed on 64-bit Windows." DescriptionLocId="AI.LaunchCondition.NoNT" IsPredefined="true" Builds="DefaultBuild"/>
   </COMPONENT>
-  <COMPONENT cid="caphyon.advinst.msicomp.MsiLockPermComponent">
-    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" User="S-1-5-18" Permission="2032127" Flags="0"/>
-    <ROW LockObject="MiniVaultData_Dir" Table="CreateFolder" User="S-1-5-32-544" Permission="2032127" Flags="0"/>
-  </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiRegsComponent">
     <ROW Registry="Comments" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\[ProductName] [ProductVersion]" Name="Comments" Value="[ARPCOMMENTS]" Component_="AI_CustomARPName"/>
     <ROW Registry="CurrentVersion" Root="-1" Key="Software\Microsoft\Windows\CurrentVersion" Name="\"/>

@@ -98,7 +98,6 @@ $requiredComponents = @(
     'caphyon.advinst.msicomp.MsiCompsComponent',
     'caphyon.advinst.msicomp.MsiFilesComponent',
     'caphyon.advinst.msicomp.MsiCreateFolderComponent',
-    'caphyon.advinst.msicomp.MsiLockPermComponent',
     'caphyon.advinst.msicomp.MsiServInstComponent',
     'caphyon.advinst.msicomp.MsiServCtrlComponent',
     'caphyon.advinst.msicomp.MsiCustActComponent',
@@ -112,6 +111,21 @@ foreach ($cid in $requiredComponents) {
     } else {
         Write-Fail "missing component: $cid"
     }
+}
+
+# The legacy LockPermissions table resolves the User column as an account *name* (LookupAccountName), so a
+# SID string there fails every install with 1609 'S-1-5-18 is not a valid user or group'. The data folder's ACL is
+# applied by WriteMachineConfig (DirectoryAcl, SID-based) instead, so the table should stay empty.
+$lockPerm = $components['caphyon.advinst.msicomp.MsiLockPermComponent']
+$lockPermRows = @()
+if ($null -ne $lockPerm) { $lockPermRows = @($lockPerm.ROW) }
+$sidRows = @($lockPermRows | Where-Object { $_.User -like 'S-1-*' })
+if ($sidRows.Count -gt 0) {
+    Write-Fail "LockPermissions row uses a SID as the User name ('$($sidRows[0].User)'); MSI cannot resolve it (error 1609). Apply the ACL from the custom action instead."
+} elseif ($lockPermRows.Count -gt 0) {
+    Write-Fail "LockPermissions has $($lockPermRows.Count) row(s); the data folder ACL is applied by WriteMachineConfig, so the table should be empty."
+} else {
+    Write-Ok 'no LockPermissions rows (data folder ACL comes from WriteMachineConfig)'
 }
 
 # A .NET Framework launch condition would be wrong: the server publishes self-contained.

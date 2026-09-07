@@ -122,10 +122,14 @@ succeeds offline with the repo's own `nuget.config`.
    component whose `KeyPath` is that file, and the components a synchronized folder creates at build
    time have generated names nothing in the project can reference. Every component is marked
    `Attributes` 64-bit (`256`), because the package is `MsiPackageType="x64"`.
-2. Creates `%ProgramData%\MiniVault` (`MsiCreateFolderComponent`) and applies SYSTEM +
-   Administrators full control to it (`MsiLockPermissionsComponent`). The component is marked
+2. Creates `%ProgramData%\MiniVault` (`MsiCreateFolderComponent`). The component is marked
    permanent, so **an uninstall leaves the folder, `appsettings.json` and the DPAPI-protected
-   master key in place**.
+   master key in place**. The folder's ACL is *not* set here: the project used to carry two
+   `LockPermissions` rows for it with `S-1-5-18` and `S-1-5-32-544` as the user, and the first real
+   install failed in `CreateFolders` with error 1609, `S-1-5-18 is not a valid user or group` — the
+   legacy `LockPermissions` table resolves its `User` column as an account name, never as a SID.
+   The rows are gone; step 3 applies the same grants from code, and `verify-aip.ps1` fails if a
+   `LockPermissions` row comes back.
 3. `WriteMachineConfig` (deferred, no-impersonate, after `InstallFiles`) writes
    `%ProgramData%\MiniVault\appsettings.json` from the `MV_*` properties and re-applies the
    protected ACL — the same grants `install.ps1` applies with `icacls`, including the read/execute
@@ -394,7 +398,7 @@ Verified from the built MSI's tables (Windows Installer API, `verify-aip.ps1 -Bu
 - **Placement.** `VerifyReadyDlg`'s theme text ends at y=110; our summary rows start at y=115.
   `ExitDialog`'s theme `Description` occupies y=95..115; the recovery note starts at y=120 (it was
   moved down after the first build showed the overlap).
-- **`LockPermissions`** has the two SID rows with `FILE_ALL_ACCESS`; `CheckBox` has the four rows.
+- **`LockPermissions`** is empty (see step 2 under "What the MSI does"); `CheckBox` has the four rows.
 
 Still to check when someone opens the project in the designer or runs the MSI:
 
