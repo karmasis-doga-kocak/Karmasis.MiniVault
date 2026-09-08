@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/MiniVault.Server/MiniVault.Server.csproj" />
-  </Folder>
-  <Folder Name="/test/">
-    <Project Path="test/MiniVault.Server.Tests/MiniVault.Server.Tests.csproj" />
-  </Folder>
-</Solution>

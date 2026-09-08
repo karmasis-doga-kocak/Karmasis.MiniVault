@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Karmasis.MiniVault.Client</RootNamespace>
+    <AssemblyName>Karmasis.MiniVault.Client</AssemblyName>
+    <PackageId>Karmasis.MiniVault.Client</PackageId>
+    <Description>Client library for the Karmasis MiniVault secret store: token handling, encrypted local cache, offline start.</Description>
+    <IsPackable>true</IsPackable>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Karmasis.Cryptography" Version="26.3.0-dek.1" />
+    <PackageReference Include="System.Text.Json" Version="10.0.11" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Karmasis.MiniVault.Contracts\Karmasis.MiniVault.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Karmasis.MiniVault.Client.Tests" />
+  </ItemGroup>
+</Project>

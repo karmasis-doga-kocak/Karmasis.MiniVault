@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Advanced Installer custom actions for the MiniVault Windows setup. SDK-style project targeting
+    .NET Framework 4.8 (the assembly is loaded by Advanced Installer's DotNetMethodCaller.dll, which
+    needs a net48 DLL; the project format does not matter to it). Part of Karmasis.MiniVault.sln, so
+    `dotnet build` / `dotnet test` at the repo root build and test it together with everything else.
+    Both Debug and Release write to bin\Release\ on purpose, so the paths referenced from
+    Karmasis.MiniVault.aip never depend on which configuration was built.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>Karmasis.MiniVault.CustomActions</AssemblyName>
+    <RootNamespace>Karmasis.MiniVault.CustomActions</RootNamespace>
+    <!-- The repo-root Directory.Build.props turns these on for the net10.0 projects; this one is
+         classic C# and does not use nullable reference types or implicit usings. -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Properties\AssemblyInfo.cs carries the assembly attributes (including InternalsVisibleTo). -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <IsPackable>false</IsPackable>
+    <Deterministic>true</Deterministic>
+    <!-- Fixed output folder: Karmasis.MiniVault.aip references bin\Release\<name>.dll. -->
+    <OutputPath>bin\Release\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <!-- Keep the restore graph in sync with the test project. -->
+    <RuntimeIdentifiers>win;win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- System.Data.SqlClient (TestSqlConnection) ships in System.Data on .NET Framework. -->
+    <Reference Include="System.Data" />
+    <!-- MessageBox.Show for ShowUiMessage: the installer's own modal message boxes, parented to the
+         wizard window (the pattern Karmasis.InfraskopeServer's setup uses). -->
+    <Reference Include="System.Windows.Forms" />
+    <!-- ProtectedData (DPAPI) for ConfigProtection: the connection string is written to appsettings.json protected. -->
+    <Reference Include="System.Security" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Karmasis.AdvancedInstallerKit comes from the Karmasis private feed (artifactrepodev); see
+         setups/AdvancedInstaller/README.md for the nuget-dev.config the build agent needs. -->
+    <PackageReference Include="Karmasis.AdvancedInstallerKit" Version="25.1.2" />
+  </ItemGroup>
+
+</Project>
